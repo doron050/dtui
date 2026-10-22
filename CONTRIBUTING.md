@@ -50,6 +50,11 @@ before you invest time. Overriding a gate requires an ADR, not a PR comment.
 - `make fmt lint test` must pass.
 - Fill in the PR template, including the gate checklist.
 
+## Releases
+
+Maintainers cut releases with the manually dispatched `release` workflow; see
+[docs/dev/releasing.md](docs/dev/releasing.md).
+
 ## Reporting security issues
 
 Do not open a public issue. See [SECURITY.md](SECURITY.md).

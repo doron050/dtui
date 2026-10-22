@@ -18,6 +18,7 @@ reference. This directory is for design and contributor documentation.
     DQL/Grail facts, the view extension model, bubbletea patterns, how to
     verify the TUI
   - [phases.md](dev/phases.md) — the phase-by-phase shipped log
+  - [releasing.md](dev/releasing.md) — how a release is cut, verified and recovered
 - **[adr/](adr/)** — architecture decision records: the load-bearing
   decisions and why they were made
 

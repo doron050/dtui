@@ -1,0 +1,69 @@
+# Releasing
+
+Releases are driven by [release-please](https://github.com/googleapis/release-please)
+and built by [GoReleaser](https://goreleaser.com), both inside the `release`
+workflow (`.github/workflows/release.yml`). The workflow is **dispatch-only**:
+nothing is released by merging to `main`.
+
+## Versioning
+
+The version comes from [Conventional Commits](https://www.conventionalcommits.org)
+on `main`. Pull requests are squash-merged, so the squashed commit message
+(the PR title for a multi-commit PR, the commit message for a single-commit PR)
+must be a conventional commit (`feat:`, `fix:`, `chore:`, ...).
+
+While dtui is below 1.0 (`bump-minor-pre-major`), a `feat:` bumps the minor
+version, a `fix:` bumps the patch version, and a breaking change bumps the minor
+version. `chore:`, `docs:`, `test:` and `ci:` commits alone do not trigger a
+release.
+
+## Cutting a release
+
+1. Open **Actions → release → Run workflow** on `main`. release-please opens or
+   updates a release PR (`chore(main): release X.Y.Z`) that bumps
+   `.release-please-manifest.json`.
+2. Review the PR. Check the proposed version and the release notes in its body.
+3. Merge the PR. PRs opened by the `GITHUB_TOKEN` do not trigger other
+   workflows, so the required checks on it never start. Close and reopen the
+   PR, or push an empty commit to its branch, to run them.
+4. Run the `release` workflow **again**. release-please now creates the tag
+   `vX.Y.Z` and the GitHub Release with its notes, and the gated GoReleaser job
+   builds and uploads the artifacts.
+
+## What a release contains
+
+- `dtui_<version>_<os>_<arch>` archives for linux, darwin and windows on amd64
+  and arm64 (`.tar.gz`, `.zip` on windows)
+- `checksums.txt` and its cosign signature `checksums.txt.sigstore.json`
+- one SPDX SBOM per archive (`*.sbom.json`)
+- a build-provenance attestation for the archives and `checksums.txt`
+
+The release notes are written by release-please. GoReleaser only attaches
+artifacts (`release.mode: keep-existing`) and never rewrites them.
+
+## Verifying a release
+
+Download an archive and `checksums.txt` into an empty directory, then follow
+the verification commands in the [README](../../README.md#install). Also check
+that `dtui --version` prints the release version.
+
+## Recovering a failed GoReleaser job
+
+If GoReleaser fails after release-please created the tag, the release exists
+but has no artifacts. Fix the cause on `main`, then run the `release` workflow
+with the `republish_tag` input set to that tag (for example `v0.2.0`). It skips
+release-please, builds the tag unchanged with the `.goreleaser.yaml` of the
+dispatched ref, and uploads into the existing release. The tag is never moved.
+
+## Release candidates
+
+Release candidates are not set up yet. If you add them, set `prerelease: true`
+under `release:` in `.goreleaser.yaml` and check how release-please versions
+prereleases first.
+
+## First release of a repository
+
+With no earlier release or tag, release-please proposes `1.0.0`. To start at a
+lower version, set `"release-as": "X.Y.Z"` in `release-please-config.json` for
+that one release and remove it again straight after, otherwise every later
+release is pinned to that version.
