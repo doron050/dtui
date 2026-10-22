@@ -40,3 +40,9 @@ updates:
       prefix: "chore(ci)"
     cooldown:
       default-days: 3
+    groups:
+      # init, analyze and upload-sarif must run the same version or CodeQL
+      # refuses to start, so they have to move in one PR.
+      codeql-action:
+        patterns:
+          - "github/codeql-action/*"
