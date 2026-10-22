@@ -1,0 +1,20 @@
+//go:build js && wasm
+
+// This file is overlaid onto dtctl's sdk/session package IN PLACE OF
+// refresh_lock_unix.go for the js/wasm build only (see wasm/build.sh). The
+// upstream file is tagged `//go:build !windows`, so it is wrongly compiled for
+// GOOS=js and pulls in golang.org/x/sys/unix (Flock, LOCK_EX, …) which has no
+// js/wasm implementation. The real fix is to retag it `!windows && !js` and
+// add a js stub upstream in dtctl — this overlay is the js/wasm stand-in.
+
+package session
+
+// acquireRefreshLock is a no-op in the browser build: there is no shared
+// filesystem to coordinate OAuth token refresh across processes, and the host
+// runtime owns authentication anyway (see cmd/web/http_wasm.go), so no dtctl
+// token refresh — and therefore no lock — ever runs here. It mirrors the
+// package-level var that refresh_lock_{unix,windows}.go define for their
+// platforms.
+var acquireRefreshLock = func(environment, tokenName string) (unlock func(), err error) {
+	return func() {}, nil
+}

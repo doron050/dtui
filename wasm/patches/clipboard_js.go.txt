@@ -1,0 +1,13 @@
+//go:build js && wasm
+
+package clipboard
+
+// The browser build has no OS clipboard binaries (xclip/pbcopy/…), so we report
+// the OS clipboard as unavailable and no-op the read/write. Callers degrade
+// gracefully rather than fail to compile. (A page-clipboard bridge for 'c'/'y'
+// copy-out is not wired yet — see WASM_CHROME_EXTENSION.md remaining work.)
+func init() { Unsupported = true }
+
+func readAll() (string, error) { return "", nil }
+
+func writeAll(text string) error { return nil }

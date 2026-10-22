@@ -1,0 +1,1730 @@
+# Field Notes & Learnings
+
+Working notes captured while implementing dtui. This complements
+[the design doc](../design/tui.md): it records the **DQL/Grail facts
+validated against a live tenant**, the **TUI extension model**, and the
+**traps** that cost time — the things you cannot infer from reading the
+code alone.
+
+> **Privacy:** this file is public. All identifiers below are illustrative
+> placeholders. Attribute a finding by tenant *kind* (for example "OneAgent-fed
+> tenant", "OTel-demo tenant", "demo tenant A") — never paste tenant names or
+> short codes, environment URLs or IDs, entity or segment IDs, hostnames, IPs,
+> people, customer or app names, internal repo URLs or ticket keys.
+
+---
+
+## 1. The DQL substrate — facts validated live
+
+Every query in `internal/tui/catalog/` was checked against a real tenant. Grail is
+introspectable, but it **fails silently**: a wrong field, wrong id type, or
+wrong data-object name returns `{"records": []}` with exit 0 — *no error*. This
+is the single most important thing to internalize. Always confirm a query
+returns non-empty before trusting a field name.
+
+> **Re-validation pass (2026-07):** every DQL-checkable claim below was
+> re-run against two further tenants, a OneAgent-fed tenant (large
+> cluster) and an OTel-demo tenant (OTLP). Corrections from that pass are folded
+> in inline and marked *(validated OneAgent/OTel-demo tenants)*. One refinement to the
+> silent-failure rule: an id-vs-string type mismatch is not *entirely* silent
+> — Grail attaches `SEVERE` `QUERY_ALWAYS_EMPTY_FILTER` +
+> `EQUALITY_COMPARISON_OF_INCOMPATIBLE_TYPES` entries to
+> `metadata.grail.notifications`, even though the record set is empty and the
+> exit code is 0. Code that inspects only `records` is still blind to it; a
+> consumer that reads `notifications` can detect the trap.
+
+### 1.1 Smartscape is a command, not a table
+
+- `smartscapeNodes "TYPE"` and `smartscapeEdges "*"` are **starting commands**,
+  not fetchable data objects. `fetch smartscapeNodes` → `UNKNOWN_DATA_OBJECT`;
+  `fetch smartscape.nodes` → `DATA_OBJECT_NOT_SUPPORTED`. A type argument is
+  mandatory (`smartscapeNodes` alone → `NO_PARAMETERS_FOR_COMMAND`).
+- Multi-type and wildcard both work in one query:
+  `smartscapeNodes "K8S_DEPLOYMENT", "K8S_STATEFULSET", "K8S_DAEMONSET"` and
+  `smartscapeNodes "K8S_*"` — so a combined "workloads" view is **one query**,
+  no client-side merge.
+- `from:` is a command parameter: `smartscapeNodes "K8S_POD", from:now()-2h`.
+  Without it you get every entity alive at *any* point in the default window —
+  including dead pods (`Succeeded`/`Failed`). A "current" view must filter
+  `k8s.pod.phase` or lifetime recency.
+- Nodes also carry `references` (a lazy forward-only adjacency object) and, for
+  K8s, `k8s.object` (the entire manifest as a multi-KB JSON string). **Always
+  project** with `| fields ...` or `| fieldsRemove references, k8s.object` in
+  the TUI's *list* queries — never fetch full records into a list. The
+  single-record detail query keeps both (the manifest and containment edges
+  are exactly what a detail page is for; the inspector collapses huge JSON by
+  default). Gotcha: `references` is **not in the default projection** — it
+  comes back only with an explicit `| fieldsAdd references` (or `fields`)
+  clause (validated live; `fieldsRemove references` on a list query is
+  therefore belt-and-braces, not load-bearing).
+
+### 1.2 The two ID casts you cannot forget
+
+| Field kind | Comparison requires | Silent-empty trap if omitted |
+|---|---|---|
+| `dt.smartscape.*` ids (nodes, edges, metric dims) | `toSmartscapeId("SERVICE-…")` | yes |
+| span `trace.id` (a UID type) | `toUid("32-hex")` | yes |
+| log `trace_id` (a plain string) | plain `== "…"` | n/a (works as string) |
+| `dt.entity.*` ids | plain string | n/a |
+| plain names (`k8s.pod.name`, `service.name`) | plain string | n/a |
+
+The asymmetry between **span `trace.id`** (UID → `toUid`) and **log `trace_id`**
+(plain string) is the crux of the log↔trace jump: a log's `trace_id` value drops
+straight into `toUid()` to fetch its spans, and a span's `trace.id` (rendered as
+32-hex) drops into a plain `trace_id == "…"` to fetch its logs. Both directions
+were round-trip validated.
+
+**Era twins on a record (validated live, OneAgent-fed tenant spans).** A record carries the
+same entity under both eras, and a `smartscape_id`-typed field *displays* as the
+same plain `TYPE-16HEX` string as its legacy twin (the cast is only needed on the
+*comparison* side, above): `dt.smartscape.service` == `dt.entity.service` (byte-
+identical `SERVICE-…` id). Not every pair is a twin — `dt.smartscape.process`
+(`PROCESS-…`) and `dt.entity.process_group_instance` (`PROCESS_GROUP_INSTANCE-…`)
+are different node types with different ids. The record inspector's links block
+dedupes exact-id twins, hoisting the current-era `dt.smartscape.*` field and
+keeping the legacy twin out of the links block only — it still reads below in
+its `dt.*` namespace group (`addLinkRows` in `internal/tui/inspector.go`).
+
+### 1.3 Signal scoping: entity fields differ per record type
+
+The costliest bug of the session. **Log records carry `k8s.*` name attributes
+but NO `dt.smartscape.k8s_*` fields.** A logs query scoped only by
+`dt.smartscape.k8s_pod == toSmartscapeId(...)` returns *empty* — not an error, a
+silently empty table. Davis events, by contrast, carry both.
+
+`catalog.SignalFilter` therefore or-s three matchers: the smartscape id, the
+legacy `dt.entity.*` id, **and** the plain `k8s.*` name (via `k8sNameFilter`),
+plus `dt.smartscape_source.id`. A nonexistent field in an or-chain compares as
+null (harmless), so over-specifying is safe; under-specifying loses data.
+
+Spans carry `dt.smartscape.service` / `dt.smartscape.k8s_*` /
+`dt.smartscape.container` — and, on **OneAgent fullstack** tenants, also
+`dt.smartscape.host` *(validated OneAgent-fed and OTel-demo tenants: ~98% of spans on the OneAgent-fed tenant, ~73% on the
+OTel-demo tenant carry it; `dt.smartscape.service` is present on ~100%)*. The original
+"spans have no host field" note held only on a pure-OTLP tenant; on an
+agent-fed tenant a HOST-scoped traces filter **does** match, so
+`catalog.SpanScopable(HOST) == false` is conservative there and worth
+revisiting. `catalog.SpanScopable(type)` still gates the `s` (traces) drill to
+the types spans can actually be filtered by.
+
+### 1.4 k8s.object parsing
+
+- Parse with the DPL JSON matcher: `| parse k8s.object, "JSON:obj"`, then
+  bracket-access `obj[status][phase]`. **`parseJson()` does not exist**
+  (`UNKNOWN_FUNCTION`).
+- The JSON matcher types numeric values as **`long`** and booleans as real
+  booleans — bracket-access supports arithmetic directly (*validated OneAgent/OTel-demo tenants:*
+  `cs[restartCount] + 5` evaluates and stays typed `long`). They only *render*
+  quoted (`restartCount:"0"`, `capacity.pods:"29"`) because Grail serializes
+  longs as JSON strings (§1.5), so a `toLong()` before `sum()` is defensive,
+  not required for arithmetic.
+- DaemonSet replica status uses different keys than Deployment/StatefulSet:
+  `numberReady`/`desiredNumberScheduled` vs `readyReplicas`/`replicas`. Use
+  `coalesce()` across both for a combined workloads READY column.
+- `expand cs = obj[status][containerStatuses]` **drops pods with no
+  containerStatuses** (some Pending pods). Acceptable for a ready/restart
+  summary; know it truncates.
+- Kubernetes omits `readyReplicas` entirely when zero are ready — treat missing
+  as `0/N`, not `N/A`.
+
+### 1.4b Smartscape `tags:<context>` maps
+
+*Validated on four tenants (demo, OneAgent-fed and Azure-enabled), 2026-07-24.* Smartscape entities carry
+their tags as **`tags:<context>` fields, each a `record` (map) of key→value** —
+not a single flat field:
+
+- k8s nodes: `` `tags:k8s.labels` ``, `` `tags:k8s.annotations` ``.
+- cloud entities/hosts: `` `tags:aws` `` (on all `AWS_*`), `` `tags:azure` ``
+  (all `AZURE_*`), `` `tags:google_compute_engine` `` (GCP), and custom contexts
+  like `` `tags:environment` ``; processes carry `` `tags:kubernetes` `` too.
+- Which contexts exist is **per entity type and per tenant** — discover, never
+  hardcode. Grail omits null fields, so a `limit 1` can miss them; scan a sample.
+- **Access is bracket-indexed with both segments backtick-quoted**:
+  `` `tags:aws`[`Dtp_Stage`] ``. Keys (and the context field) can contain
+  `.`/`/`/`:` (e.g. `node.kubernetes.io/instance-type`,
+  `app.kubernetes.io/name`), which is why the whole segment must be quoted. Both
+  `| filter` **and** `| fieldsSummary` accept this expression directly off
+  `smartscapeNodes` — no temporary projection needed (a
+  `` | fieldsSummary `tags:azure`[`dt_owner_team`], topValues:5 `` returns
+  values, validated Azure-enabled tenant). This is what `catalog.Facet.MapField/MapKey`
+  emits.
+- **Map facet filters must be injected before any `| fields`/`| summarize`
+  stage.** Those stages drop the tag maps, so a filter after them fails with
+  `FIELD_DOES_NOT_EXIST` (validated Azure-enabled tenant: HOST/AZURE/K8S). `ComposeQuery`
+  places map-facet `| filter` stages in the early-head block (with
+  searches/bucket filters); `FieldsSummaryQuery` explores off a stripped
+  pipeline (source + leading scope filters only) for the same reason.
+- **List specs and the maps they carry.** `| fieldsRemove` specs (hosts, cloud
+  resources) keep every `tags:*` map on the row for free; `| fields`/`|
+  summarize` specs (k8s) drop them unless projected. The k8s specs project
+  `` `tags:k8s.labels` `` (pods via `takeAny` in the summarize — `takeAny` on a
+  map returns the record intact; the others on the `| fields` line) so the peek
+  can render it. Annotations are intentionally never projected onto rows: they
+  are open-ended and multi-KB (e.g.
+  `kubectl.kubernetes.io/last-applied-configuration`, pod maxAnn≈2.5 KB) —
+  still facetable via discovery, never in the peek.
+- **Signals do NOT carry these maps.** logs/spans/`metric.series` have no
+  `tags:*` (nor `primary_tags.*` unless configured) — only resolved structured
+  attributes (`k8s.pod.name`, `aws.region`, `azure.resource.id`). Tag faceting
+  is therefore entity-list-only.
+- **Note:** The live faceting *mechanism* is the one described here — tag
+  discovery + `Facet.MapField/MapKey`. It replaced the earlier
+  `Spec.FacetMaps` + projected-`labels`-alias mechanism once sketched in §1.22.
+  §1.22 is **not** wholesale obsolete: its tenant-validated field facts
+  (manifest-strip trap, which lists carry the maps) and picker-ordering rules
+  (`FacetPriority`, discovered-key tail) remain current and are cited by live
+  code — only the `Spec.FacetMaps` projection plumbing there is historical.
+
+### 1.5 JSON serialization quirks (dtctl `-o json`)
+
+- **Longs, counts, durations, status codes serialize as JSON strings**
+  (`"37"`, `"500"`, `"5194"`), while **floats stay numbers** (`3.1`) and
+  **booleans stay booleans**. Sort/parse code must handle both — see
+  `catalog.sortable()` and the numeric-string `strconv.ParseFloat` fallback in
+  `table.go`.
+- Grail **durations** serialize as a string of **nanoseconds** (`"4845165"` =
+  4.85ms). `toString(duration)` instead renders seconds. `catalog.FormatNs`
+  parses the raw ns.
+- **timeseries `interval` is a nanosecond string** (`"300000000000"` = 5m);
+  series arrays are `[]any` of `float64` and **`nil`** (empty buckets). Sparkline
+  code must tolerate nulls anywhere (see `catalog.FloatSeries`).
+
+### 1.6 Metrics catalog & batched enrichment
+
+- **There is no `dtctl metrics` subcommand.** Discover keys via DQL:
+  `fetch metric.series | filter startsWith(metric.key, "dt.kubernetes") |
+  summarize count(), by:{metric.key}`. `fetch metric.series | filter metric.key
+  == "…" | limit 1` reveals every dimension a series carries (use to find the
+  right filter field).
+- Batched sparkline enrichment (one query per visible page) works exactly as
+  hoped and stays under ~1s for the whole set:
+  `timeseries cpu = avg(…), by:{k8s.pod.name}, filter: { in(k8s.pod.name,
+  {"a","b"}) }, interval: 5m`. The `in(field, {"a","b"})` **curly-brace set
+  literal** is the working syntax; for smartscape ids wrap each element in
+  `toSmartscapeId(...)`. Result: one record per key with the by-field as a flat
+  JSON key beside the series array.
+- K8s metric **units**: all CPU metrics are **millicores** (a 500m limit shows
+  as `500`); memory is **bytes**.
+- **No restart/OOM metric exists** on the tenant. Proxy via
+  `dt.kubernetes.events` filtered by `k8s.event.reason` (OOMKilling/BackOff),
+  or `dt.kubernetes.containers` by `container_state`. Note `dt.kubernetes.events`
+  is a **metric** (event counts, queried via `timeseries`), *not* a fetchable
+  table — `fetch dt.kubernetes.events` → `UNKNOWN_DATA_OBJECT`. Raw K8s events
+  are **not** in the `fetch events` table at all — and that table carries more
+  than Davis kinds: *(validated OneAgent/OTel-demo tenants)* it also holds `RUM_EVENT` /
+  `SDLC_EVENT` / `FLEET_EVENT` / `SYNTHETIC_EVENT` plus a large null-`event.kind`
+  bucket, so don't assume `fetch events` is only `DAVIS_EVENT`/`DAVIS_PROBLEM`.
+- Not every entity reports every metric: services with no traffic simply have
+  **no record** (treat missing as "no data", not zero). The service timeseries
+  also emits a record with a **null by-key** — skip it when building the id→series
+  map.
+- **Process/container/infra dimensions** (validated live, box tenant):
+  `dt.process.*` series carry `dt.smartscape.process` AND `dt.smartscape.host`
+  AND `host.name` — one query lists a host's processes ranked by CPU.
+  `dt.process.cpu.usage` / `.memory.usage` are **percent of host**;
+  `.memory.working_set_size` is bytes. `dt.kubernetes.container.*` series
+  carry `dt.smartscape.container` plus `dt.smartscape.k8s_{pod,deployment,
+  statefulset,daemonset,namespace,cluster}` — the workload/namespace/cluster
+  vitals scope by their own smartscape id. `dt.host.*` series carry
+  `host.name`, and a K8s node's name equals its OneAgent host name (EKS) —
+  `MetricScopeFilter` adds a `host.name` arm for `K8S_NODE`, which is how a
+  node page charts real utilization (allocatable-only otherwise).
+- **PROCESS/CONTAINER Smartscape nodes join by plain names**: both carry
+  `host.name`; CONTAINER carries every `k8s.*` name (pod, workload, namespace,
+  cluster) plus `container.image.name/.version`; a process' pod lives in
+  `` process.metadata[`KUBERNETES_FULL_POD_NAME`] `` (backtick map access
+  filters server-side). EC2 has **no `cloud.aws.ec2.*` CloudWatch keys** on
+  box — EC2 utilization lives on the OneAgent HOST entity; CloudWatch coverage
+  is rds/networkelb/eks/ecr.
+- `container.image.name` on CONTAINER nodes **flaps** between the repo path
+  and a bare 12-hex image id (observed live minutes apart) — render whatever
+  is there, don't parse it as a URL.
+
+### 1.6b The `metrics` command — the explorer substrate
+
+- The **`metrics` DQL command** enumerates metric *series* — one record per
+  metric key + full dimension set, `from:` bounded (`metrics from:now()-2h`).
+  It takes no positional args and no `filter:` parameter; narrow with `| filter`
+  and aggregate with `| summarize count(), by:{metric.key}` (~0.7s for a busy
+  tenant). `| search` and `fieldsSummary` both work after it, so the standard
+  table machinery (server search, facets) applies unchanged.
+- Per-entity metric discovery is `metrics | filter <scope> | summarize
+  by:{metric.key}` — a single pod on a busy tenant showed **~120 keys**
+  (dt.kubernetes/containers/process/runtime plus custom OTel app metrics),
+  which is why the explorer view exists at all.
+- **OTel-exported service metrics carry `service.name` and legacy
+  `dt.entity.service` but NOT `dt.smartscape.service`** — and the legacy
+  service id is a *different value* than the Smartscape one. Scoping service
+  metrics needs the or-chain in `MetricScopeFilter` (both id eras + the name);
+  on the test tenant the name clause grew one service's discovered keys from
+  3 to ~35 (http.server.*, db.client.*, gen_ai.*, custom app metrics).
+- Metric **metadata is absent**: `metric.unit` / `metric.description` are null
+  on every series record and `dt.semantic_dictionary.metrics` doesn't exist.
+  Explorer charts render unitless; only canned series carry curated units.
+- `dt.service.request.response_time` is **microseconds** (µs), not ms —
+  cross-validated against `avg(http.server.request.duration)` (seconds, OTel
+  convention) tracking within rounding on the same service.
+- **A multi-series `timeseries` query returns ZERO records if ANY requested
+  metric has no series at all** for the filter — and `default:` does *not*
+  rescue an entirely-absent key (it only fills gaps in existing series). This
+  silently blanked the whole pod metrics page for pods without limits set.
+  The fix is the two-phase flow in `metricsView`: probe availability with
+  `metrics … | summarize by:{metric.key}` first, then compose the timeseries
+  from the available subset (`MetricsSpec.AvailabilityQuery` / `.Query`).
+- Splitting a metric per dimension is `timeseries value = agg(key), by:{dim}`
+  — one record per dimension value. Discover the dims by sampling
+  `metrics | filter metric.key == "…" | limit 500` and counting distinct
+  values client-side (`discoverDims`); series records carry only dims plus
+  `metric.key`, so every other field is a candidate.
+
+### 1.7 dt.davis.problems is a transition log, not a problem list
+
+In principle `dt.davis.problems` is a status-transition log, but *(validated
+OneAgent/OTel-demo tenants)* it returns effectively **one record per problem** — latest state,
+with the lifecycle carried in `event.start`/`event.end` (max 1–2 rows/problem
+over 7d; a closed problem is a single CLOSED row, not a separate ACTIVE row).
+The `takeLast` summarize idiom below is still the correct, defensive way to get
+currently-open problems — it stays right whether a problem emits one row or
+many:
+
+```
+| sort timestamp asc
+| summarize { status = takeLast(event.status), … }, by:{display_id}
+| filter status == "ACTIVE"
+```
+
+Affected-entity id arrays differ by era: `smartscape.affected_entity.ids` uses
+`K8S_*` ids and is often **null**; `affected_entity_ids` (classic) uses
+`CLOUD_APPLICATION-…`/`KUBERNETES_CLUSTER-…` and is fuller but doesn't match
+`dt.smartscape.host/service` directly. Match with `matchesPhrase` over both.
+
+### 1.8 smartscapeEdges — the relations panel
+
+- Default projection is only `{source_id, target_id, type}`. `source_type`/
+  `target_type` are **lazy** — add `| fields source_id, source_type, type,
+  target_id, target_type`. Edge records **never** carry names.
+- Query **both directions in one query** — source-only misses incoming edges
+  (`K8S_SERVICE --routes_to--> pod`, `CONTAINER --is_part_of--> pod`):
+  `| filter source_id == toSmartscapeId(ID) or target_id == toSmartscapeId(ID)`.
+- Resolve names in a second batched query:
+  `smartscapeNodes "*" | filter in(id, {toSmartscapeId(...), ...}) | fields id,
+  name, type`. **Not every edge endpoint has a node** (`K8S_SECRET`,
+  `K8S_CONFIGMAP` have edges but no node records) — fall back to the raw id.
+- Both queries ~0.7s; fine for an interactive panel with a brief spinner.
+- **`k8s.pod.name` is NOT unique — scope a pod's children by its smartscape id
+  through the `is_part_of` edge, never by name.** A StatefulSet reuses
+  `<name>-N` on every namespace and cluster: on OneAgent-fed tenant, `smartscapeNodes
+  "CONTAINER" | filter k8s.pod.name == "eventbus-default-js-0"` returned **105
+  containers across 35 namespaces / 5 clusters** (validated OneAgent-fed tenant; the user saw
+  the same with `dynatrace-server-2`). The unique fix is a topology join on the
+  pod id, mirroring `ServiceRunsOnStage` — for that same pod it returned
+  **exactly its 3 containers** in the one right namespace (validated OneAgent-fed tenant):
+  `| join [smartscapeEdges "*" | filter target_id == toSmartscapeId(POD_ID) and
+  type == "is_part_of" | fields source_id], on:{left[id] == right[source_id]},
+  kind:inner` — the inner join drops the edge's non-container sources
+  (`PodContainsStage`, catalog `smartscape.go`). Name-only matching stays valid
+  only for logs/events (`k8sNameFilter`), where records carry no
+  `dt.smartscape.k8s_*` fields (§1.3). `dt.smartscape.k8s_pod` is confirmed on
+  container *metric series* but **unverified on CONTAINER nodes** — the edge
+  join avoids relying on it.
+
+### 1.9 AWS inventory is name-poor
+
+- On a lightweight-poller tenant, `name` is an **empty string** (not null) on
+  most AWS nodes; richer-poller tenants populate it on nearly all. Either way the
+  fallback stays correct. Display fallback:
+  `coalesce(if(name != "", name), ` + "`tags:aws`[`Name`]" + `, aws.arn)`.
+  Note the field is literally named `` `tags:aws` `` (colon) and needs backticks.
+- Coverage of `aws.account.id` / `aws.arn` / `aws.region` varies by estate
+  (global resources like S3 have no region; small estates saw account-id gaps) —
+  don't assume any is 100%. `aws.object` may not exist at all (no instance
+  type/state/AZ then).
+- AWS-only census in one query: `smartscapeNodes "*" | filter startsWith(type,
+  "AWS_") | summarize count(), by:{type}`.
+- CloudWatch metrics embed the dimension in the key name
+  (`cloud.aws.rds.CPUUtilization.By.DBInstanceIdentifier`); scope by
+  `dt.smartscape_source.id == toSmartscapeId(...)`.
+
+### 1.9b Azure inventory — name-rich, subscription needs a name lookup
+
+Validated on an Azure-enabled tenant (2026-07). Azure is the parallel of AWS
+(§1.9) through the same generic browser, differing in ways the catalog relies on
+(`internal/tui/catalog/cloud.go`, `internal/tui/datasource.go`):
+
+- **Region = `azure.location`** (e.g. `eastus`, `australiaeast`);
+  **account-analog = `azure.subscription`** — a 36-char GUID, not a number.
+  Geography/tenant metadata types that live *above* a subscription
+  (`AZURE_MICROSOFT_RESOURCES_LOCATIONS`, `…_LOCATIONS_AVAILABILITYZONES`,
+  `…_TENANTS`, …) carry a `null` subscription by construction. These fields feed
+  the `resourcesSpec` Azure columns (`ScopeColumns` swaps them in for `AZURE_`
+  scopes; AWS/other providers fall through to the static AWS columns), and the
+  SUBSCRIPTION column is dropped for the known subscription-less types rather
+  than shown blank (`azureSubscriptionless`, hardcoded from the types above).
+- **Azure is name-rich** (unlike AWS §1.9): `name` / `azure.resource.name` are
+  well-populated, so the display coalesce usually resolves on `name`.
+- **Subscription friendly name** lives ONLY on
+  `AZURE_MICROSOFT_RESOURCES_SUBSCRIPTIONS` nodes: `azure.subscription` (GUID) →
+  `name`. Fetch it with `smartscapeNodes` — **not**
+  `dt.entity.azure_subscription`, whose id is a DT-hashed id, not the GUID every
+  other Azure node stamps. dtui caches this GUID→name map per session (like
+  the semantic dictionary) and enriches rows in place into a synthetic
+  `__azure.subscription.name` field (ADR-0016 `__`-hidden key); the browser
+  SUBSCRIPTION column and the detail "Azure subscription name" KeyFact read
+  that, staying blank (never the GUID) until the cache lands.
+- **Azure census in one query:** `smartscapeNodes "*" | filter startsWith(type,
+  "AZURE_") | summarize count(), by:{type}`. `prettyType` drops the redundant
+  `AZURE_MICROSOFT_` prefix (`AZURE_MICROSOFT_COMPUTE_DISKS` → `compute disks`).
+  Serverless functions type: `AZURE_MICROSOFT_WEB_SITES_FUNCTIONS`.
+
+### 1.10 search & fieldsSummary — the facet substrate
+
+All validated live; implementation in `internal/tui/catalog/facets.go`.
+
+- **`| search "text"` placement is constrained.** It works after the source
+  command (`fetch`, `smartscapeNodes`) and after `filter`/`fieldsRemove`, but
+  is **rejected after transforming commands** — `parse`, `expand`,
+  `summarize` — with `SEARCH_COMMAND_NOT_ALLOWED_AFTER`. Inject it directly
+  after the source line (`InjectSearches`), never before the sort/limit tail
+  (found the hard way on the pods pipeline). **Chained search stages compose
+  as AND** (`| search "*a*"\n| search "*b*"`), so stacked terms need no
+  expression syntax.
+- **`search` matches whole tokens, not substrings.** `search "fss"` does
+  *not* match pod `…-fssb5`; `"fss*"` and `"*fss*"` do. Wrap bare terms in
+  `*…*` to get the contains semantics a filter box promises. Matching is
+  case-insensitive across all fields.
+- **`fieldsSummary <field>, topValues: N`** returns one record per field:
+  `{field, count, rawCount, values: [{value, occurrence-count}]}` — counts
+  are stringified longs, and **values are stringified even for numeric
+  fields** (`"2"` for `logical_cores`).
+- **Facet comparisons never wrap the field in `toString()`** — a function
+  call on the field mutes Grail's index features. `Facet.Stage()` instead
+  branches on the shape of the stringified value; all encodings validated
+  live against the toString forms they replaced (equal counts, row-level
+  where checked):
+  - **Plain strings:** `field == "x"` — exact and case-sensitive. No `~`
+    leg: `~` is case-insensitive and token-based, so `phase ~ "Running"`
+    also matches `"Running fast"` and `"running"`, and
+    `dt.system.bucket ~ "logs_product"` matches
+    `custom_sen_low_logs_product_limit` (consecutive-token phrase).
+  - **Numbers:** `field == 2 or field == "2" or field == duration(2, "ns")`.
+    `logical_cores == "2"` is *silently empty* on a numeric field and
+    `== 2` on a string field, so both legs are needed; the `duration()` leg
+    matches duration fields, whose `fieldsSummary` values are nanosecond
+    counts (`"203000"`) that neither `toString(duration)` (renders seconds)
+    nor the old encoding ever matched.
+  - **Booleans:** `field == true or field == "true"` — `~` never matches
+    booleans (server warns), and `== "true"` alone is silently empty on a
+    real boolean.
+  - **ID-shaped values** (smartscape ID, hex UID, UUID, IP):
+    `field == "x" or field ~ "x"`. Typed scalars never equal a string
+    literal — `dt.smartscape.host == "HOST-…"` is silently empty with a
+    "convert using toSmartscapeId()" warning, same for UID `trace.id` —
+    while `~` auto-converts and matches their **exact** string
+    representation (case-sensitive for smartscape IDs). Counts equal the
+    toString encoding (4102/4102 hosts on logs, 6/6 trace ids on spans).
+  - **Hex UID values (16- or 32-hex: `span.id`, `trace.id`, `subtrace.id`)**
+    additionally get an explicit `field == toUid("x")` leg —
+    `field == "x" or field == toUid("x") or field ~ "x"`. The `~` leg's
+    auto-convert is a **token-index trick, not a type conversion**, so it
+    is not guaranteed across tenants/Grail versions; `toUid()` is the
+    canonical UID comparison. *(validated OneAgent-fed tenant, ~160M spans/2h:* on
+    `subtrace.id`, `== "x"` → 0, while `~ "x"` and `== toUid("x")` both →
+    the same count for every id tested — parity, but toUid is the honest
+    one.)* Adding the leg is **free of risk on non-UID fields**: `toUid()`
+    of a non-16/32-hex string, or comparing a plain-string field to a
+    `toUid()` value, returns **null / false with no error or warning**
+    (`span.name == toUid("…")` → 0), so the leg simply no-ops where it
+    doesn't apply. `uidHexShape` gates it to toUid's two accepted lengths.
+  - **Patterns:** `matchesValue(field, "pay*")` on the bare field:
+    case-insensitive, `*` wildcards at either end, **element-wise on string
+    arrays** and accepts smartscape IDs — but returns false on genuinely
+    `long`/`double`/UID-typed fields, so wildcard facets on numeric fields no
+    longer match (accepted trade-off; only toString could do that). *(validated
+    OneAgent/OTel-demo tenants:* this evaluates false with **no error and no warning** — the
+    warning noted earlier did not fire; and where a field is ingested with
+    mixed types across records, `matchesValue` matches only the string-typed
+    subset.) The pattern must be a **compile-time constant** — a `concat()` of
+    string *literals* is folded and accepted; only a data-referencing
+    expression (`concat(field, "*")`) fails with
+    `MANDATORY_PARAMETER_HAS_TO_BE_CONSTANT`.
+- **Array fields facet element-wise without toString.**
+  `matchesValue(arrayField, "*ELEMENT*")` matches rows whose **string**
+  array contains a matching element (equal counts vs the old
+  toString-serialization encoding, validated on events). Arrays of records
+  or numbers refuse `matchesValue` ("inner type has to be a string or a
+  smartscape id") — those facet through the **`~` search operator**
+  (`Facet.Tokens`): `arrayField ~ "v"` matches if any element matches, with
+  records matching on any nested field name or value and numbers matching
+  their exact representation (`array(1,2,3) ~ "3"`). `~` is token-based on
+  strings: `"Hello World" ~ "world"` matches, `"HelloWorld" ~ "world"`
+  doesn't.
+- Facet `filter` stages stay before the sort/limit tail — after a
+  `summarize`, that's what makes them filter the exact fields the columns
+  (and the facet attribute picker, built from fetched record keys) present.
+- **`dt.system.bucket` is the primary narrowing axis — and a whitelist.**
+  Buckets are Grail's physical data separation, so a bucket filter prunes
+  reads at the source. The field is queryable and `fieldsSummary`-able on
+  every bucket-backed table *without* a projection, but only appears in
+  responses via `| fieldsAdd dt.system.bucket`. On tables without buckets
+  (`dt.entity.*`, `dt.system.buckets`, `dt.semantic_dictionary.*`) any
+  reference **fails the whole query** with `FIELD_DOES_NOT_EXIST` — not
+  null — so eligibility is the `bucketTables` whitelist (the
+  `dt.system.table` values of `fetch dt.system.buckets`, plus the
+  `dt.davis.*` / `dt.synthetic.*` views over events, all validated live).
+  A single exact bucket facet on a **real table** becomes the fetch
+  command's `bucket:{"name"}` parameter — Grail's native physical pruning;
+  identical counts to the filter form over a fixed window, and it composes
+  with `| search` + the projection (validated live). The `dt.davis.*` /
+  `dt.synthetic.*` **views reject the parameter**
+  (`PARAMETER_NOT_ALLOWED_FOR_FETCH_VIEW`), and multiple bucket facets must
+  AND (a multi-value parameter would OR) — both keep the old head filter
+  stage directly after source + search (order validated live), where it
+  also survives `summarize`; the projection is skipped for API views, whose
+  query is analyzer input.
+
+### 1.11 Span lenses — why the traces view fetches spans directly
+
+The traces list originally aggregated (`summarize … by:{trace.id}`), which was
+slower and starved the facet picker: post-summarize only the aggregate fields
+exist. Fetching spans directly and slicing with lens filters keeps every span
+attribute available. Facts validated live (box tenant, 2h window, ~280k spans):
+
+- **Root heuristic:** `isNull(span.parent_id)` (~33.6k) is the OTel root
+  definition and what the lens uses. Dynatrace's `request.is_root_span == true`
+  (~42k) is broader — also true on spans whose parent fell outside ingest —
+  and the two only overlap on ~31.4k spans; neither subsumes the other.
+- **Failure signal:** `span.status_code == "error"` (681) vastly out-catches
+  `request.is_failed == true` (7), which exists only on entry spans. The
+  errors lens ORs both. `span.status_code` is null on ~99.8% of spans.
+- **DB spans:** `isNotNull(db.system.name)` (231k) is broader than
+  `db.query.text` (120k) — drivers emit `pool.acquire` etc. without query
+  text. The db lens filters on the system attribute (both era names, see
+  below), displays the query text with `span.name` fallback.
+- **Two semconv eras, disjoint populations.** OTel renamed the database
+  attributes on the way to stability (`db.statement` → `db.query.text`,
+  `db.name` → `db.namespace`, `db.operation` → `db.operation.name` in
+  semconv 1.26; `db.system` → `db.system.name` in 1.30, stable since 1.33) —
+  and the two big demo tenants sit on opposite sides. Validated live (4h
+  windows): the OneAgent-fed tenant has **1.73M `db.system` / 0
+  `db.system.name`** spans (the Dynatrace semantic dictionary itself defines
+  `db.system` next to new-style `db.query.text`/`db.namespace` — OneAgent
+  emits that mix), the OTLP-fed tenant has **0 / 349k** — the exact inverse.
+  *(validated OneAgent/OTel-demo tenants — complicates the clean "two eras per tenant" split:*
+  **both** carry `db.system` and **neither** carries `db.system.name`, yet both
+  adopted the *new* `db.query.text` / `db.namespace` / `db.operation.name`. So
+  the system attribute stayed legacy-named while the rest migrated —
+  field-by-field, not tenant-by-tenant. The operational takeaway is unchanged
+  and reinforced: OR both spellings of every attribute you filter on.)
+  Same story for HTTP (652k spans carry only legacy `http.method`, 4.26M the
+  stable `http.request.method`) and messaging (`messaging.operation.type` on
+  all 14.6k, legacy `messaging.operation` dup-emitted on a subset). A filter
+  or column that reads only one era's name silently loses an entire tenant:
+  every category discriminator must OR both, every display column coalesce
+  both. `request.is_failed` → `transaction.is_failed` is the same pattern on
+  the Dynatrace side (dictionary deprecation; both tenants dup-emit both
+  today — `catalog.SpanFailed` checks both).
+- **RPC and messaging carve out real subsets.** `isNotNull(rpc.system)`
+  (1.9M: grpc, apache_axis, aws_api, dotnet_remoting — OneAgent also leaks
+  numeric enums "1"/"2" with meaningful `rpc.service`/`rpc.method` beside
+  them) and `isNotNull(messaging.system)` (kafka, artemis, mqseries, aws_sqs
+  with `messaging.destination.name` + operation type) each got a lens.
+  DynamoDB spans carry `db.system` **and** `rpc.system=aws_api` —
+  `SpanCategory` gives db precedence. FaaS spans exist (`faas.trigger`,
+  140k) but all also categorize via http/rpc, so no faas lens.
+- **GenAI spans:** `gen_ai.operation.name` is the discriminator;
+  `gen_ai.system` is empty on this tenant while `gen_ai.provider.name`,
+  `gen_ai.request.model`, and `gen_ai.usage.*_tokens` are populated.
+- **Multi-line cell values shear table rows.** `db.query.text` routinely
+  contains newlines (sqlc header comments); any `\n` in a cell breaks the
+  row grid. The table cell primitives (`pad`/`cell` in `table.go`) flatten
+  whitespace runs before truncation.
+
+### 1.11b span.events, exceptions, and error visibility
+
+Validated live on both tenants (box 24h, demo 2h windows):
+
+- **`span.events` is an array of records** discriminated by `span_event.name`
+  — `exception`, `bizevent`, `feature_flag`, `message`, or free
+  instrumentation text ("Enqueued", "Fetch cart"). Box emits only exception
+  events; demo has the full zoo (1M+ bizevent, 250k exception per day).
+- **Exceptions mostly ride on NON-failed spans.** ~98% of exception-bearing
+  spans on demo have `span.status_code` null or `"ok"` (a caught-and-handled
+  error, a 404 recorded via `HttpServletResponse.sendError`). Any exception
+  surfacing keyed off the status verdict misses nearly all of them — hence
+  the dedicated exceptions lens, the preview facts, and the waterfall `⚡`
+  badge that are independent of `✗ failed`.
+- **Two exception spellings, both live on one tenant.** Grail/OneAgent
+  serializes `exception.stack_trace` (plus `exception.id`,
+  `exception.file.full`, `exception.line_number`,
+  `exception.is_caused_by_root`); pure-OTel SDK events carry
+  `exception.stacktrace` (701 events on demo had ONLY that spelling).
+  `catalog.SpanEvent.Exception()` coalesces both. Cause chains produce
+  multiple exception events per span (2–31 seen).
+- **Raw iterative expressions are rejected in `filter` — but `iAny()` makes
+  them legal.** `filter in("exception", span.events[][span_event.name])`
+  fails with `ITERATIVE_EXPRESSION_FOR_FILTER`, yet
+  `filter iAny(span.events[][span_event.name] == "exception")` collapses
+  the iteration to a scalar boolean and passes — the exceptions lens uses
+  it. Row-for-row equivalent to string-matching the toString-serialized
+  array (`contains(toString(span.events), "\"span_event.name\":\"exception\"")`,
+  the old encoding: 6/6 spans, 0 disagreements, validated live) without the
+  serialize-and-scan cost. Iterative access also works after `expand` or in
+  `fieldsAdd`.
+- **The request verdict exists only on entry spans.** A deep span that
+  errored carries just `span.status_code == "error"` — `catalog.SpanErrored`
+  (verdict OR status code) is what the waterfall marks; `SpanFailed` alone
+  left every non-entry error span unmarked.
+- **Minimal error briefs cover ~98% of failed spans**: HTTP status ≥ 400
+  (3.3k of 7.7k failed demo spans carried one) → gRPC status code (numeric;
+  `4` = DEADLINE_EXCEEDED — name it) → exception type → `span.status_message`.
+  Only ~2% of failed spans carry none of the four (`catalog.SpanErrorBrief`).
+- **`code.call_stack` is OneAgent-only and sparse.** 683k demo spans in 4h
+  carry it (box: zero; OTel's `code.stacktrace` spelling: zero anywhere), but
+  per-endpoint only ~2–17% of spans have it stamped. Stack-shaped fields are
+  suffix-matched (`call_stack`/`stack_trace`/`stacktrace`) and collapse
+  behind their top frame — `vulnerability.stack` is a tech-stack enum and
+  must not match.
+
+### 1.11c Scan limit — a `filter` narrows the result, not the scan
+
+Grail scans every record in the `from:`/`to:` window to *apply* a filter, then
+returns the matches. So `fetch spans, from:… | filter trace.id == toUid(…)`
+scans the **whole timeframe** — the one-trace filter buys nothing on the scan
+side. On a large tenant this is the difference between a usable view and a dead
+one: validated live on a large tenant, the trace waterfall over a 30-day window scanned
+the full **500 GB** scan limit, gave up after ~78 s, and returned
+`{"records": []}` with exit 0 — an empty success, no error (the classic silent
+failure). The same query over a **±15 min** window around the span returned the
+full 500-span trace in ~4.5 s.
+
+- **Mitigation is to shrink the scan, not the result.** The waterfall now
+  anchors its fetch to the originating span's `start_time` (`waterfallPad`,
+  ±15 min) — a trace occupies one instant, so a tight absolute window costs
+  nothing and dodges the limit. The old reflex of *widening* an empty result to
+  24h is exactly backwards on a big tenant (it scans more); it now only fires
+  for the anchorless manual `trace <id>` path, and never past a bounded window.
+- **Surface the limit, don't swallow it.** `ExecuteQueryWithContext` hands the
+  Grail notifications back on the response (`resp.GetNotifications()`) without
+  printing them (its stderr hint path is CLI-only, never invoked by the TUI).
+  `internal/tui/notice.go` classifies them (scan limit / result limit / fetch
+  timeout / sampling — mirroring exec's unexported `classifyNotification`) and
+  the app shows a one-line footer banner. A scan-limit or timeout notice on an
+  *empty* result also suppresses the widen retry — that empty is "the scan gave
+  up," not "the trace isn't in this window."
+- Notification type is `SCAN_LIMIT_GBYTES`; some deployments don't stamp a
+  stable type, so the message-text fallback ("stopped after N gigabytes of data
+  were scanned") is a second signal. Other levers exist (`bucket:{…}`,
+  `samplingRatio`, raising `--default-scan-limit-gbytes`) but narrowing the
+  timeframe is the biggest and the only one dtui applies automatically.
+
+### 1.12 The expansion tables (RUM, bizevents, dictionary, dt.system, synthetic)
+
+Validated live for Phase 3.5 (box tenant; synthetic on the demo tenant):
+
+- **`user.events` has NO `event.type`** — `summarize by:{event.type}`
+  returns one null bucket, silently. The discriminator is
+  `characteristics.classifier` (request, error, user_action, view_summary,
+  page_summary, navigation, …), and the field set varies per classifier.
+  Durations and web vitals are **ns strings** (`"1948000000"` = 1948ms) but
+  `web_vitals.cumulative_layout_shift` and `ttfb.*_duration` are raw floats.
+- **`user.sessions` is sparse** (single digits over 2h) — the view floors
+  its window at 24h (same pattern as vulnerabilities). The session↔events
+  join key is `dt.rum.session.id` on both tables, `-0` suffix included.
+  `dt.smartscape.frontend` / `frontend.name` are **scalars on events but
+  arrays on sessions** — the sessions scope filter goes through
+  `matchesPhrase(arrayToString(…))`, the events one through
+  `== toSmartscapeId(…)`.
+- **`bizevents` payloads are producer-shaped**: one producer writes flat
+  `slo_name`, another dotted `slo.name`, a third only `event.category` —
+  and `event.category` can be entirely absent. A content column is a
+  client-side coalesce chain; `event.type` + `event.provider` are the
+  reliable facets. Window floored at 24h (2h hid all but one producer).
+- **`dt.semantic_dictionary.fields.model_id` is null on all ~1400 records**
+  — a dead column. The real join is reversed: `models.fields` is a string
+  array; `expand fields | join [fetch …fields], kind: leftOuter, on: {
+  left[field_name] == right[name] }`. Default (inner) join silently drops
+  the ~13% of declared names without a definition row. No model is named
+  `spans`/`logs` — the Grail table lives in `data_object`, and five
+  link-models carry the **literal string "null"** there.
+- **`dt.system.data_objects`** distinguishes tables from views by `type`
+  (19/344 on box); the `metrics` object is `usable_with:
+  ["fieldsSnapshot"]` only — `fetch metrics` is invalid, so the tables
+  view refuses enter there. **`dt.system.buckets`** is snake_case
+  (`retention_days`, `dt.bucket.class`, `dt.system.table`) and has no
+  status column (REST-only). **`load` syntax**: double quotes, absolute
+  path, no scheme — wrong shapes fail loud (PARSE_ERROR_SINGLE_QUOTES /
+  TABULAR_FILE_MUST_START_WITH_SLASH / UNKNOWN_TABULAR_FILE), and both
+  `| search` and facet filters compose after `load` fine.
+- **Synthetic *monitors* are not in Smartscape.** `smartscapeNodes
+  "SYNTHETIC_TEST"` / `"SYNTHETIC_MONITOR"` is empty even on tenants with dozens
+  of monitors — but *(validated OneAgent/OTel-demo tenants)* the synthetic *infrastructure* nodes
+  `SYNTHETIC_LOCATION` and `SYNTHETIC_ENGINE` **do** appear, so a blanket
+  `smartscapeNodes "SYNTHETIC_*"` is **not** empty. The views run on classic
+  `fetch dt.entity.synthetic_test` / `dt.entity.http_check` (which are absent
+  entirely on some tenants — `UNKNOWN_DATA_OBJECT` on OTel-demo tenant; present on OneAgent-fed tenant)
+  (union via
+  `append [ … ]` — validated) with `fieldsAdd lifetime, tags` (unknown
+  attributes there **hard-fail** with FIELD_DOES_NOT_EXIST, unlike most of
+  Grail). Two metric families keyed by different entity dims
+  (`dt.synthetic.browser.*` by `dt.entity.synthetic_test`,
+  `dt.synthetic.http.*` by `dt.entity.http_check`) — the availability
+  enrichment appends two timeseries and aliases both dims to one `key`
+  field. Classic entity ids are plain strings: `in(dim, {"ID"})` without
+  `toSmartscapeId`. Execution results: `fetch dt.synthetic.events` (exact
+  name), HTTP step events are `http_step_execution` (no "monitor").
+- **LogPatternExtractor** (`dt.statistics.clustering.LogPatternExtractor`):
+  input `{"logQuery": …}` — the query **must project `timestamp` and
+  `content`** (schema-enforced) — plus `numberOfExamples` and
+  `generalParameters.timeframe`. The generic `--query` shorthand of
+  `dtctl exec analyzer` maps to `timeSeriesData` and is wrong for this
+  analyzer. Execution is effectively synchronous (<1s for hundreds of
+  records; the SDK's ExecuteAndWait covers the async path). Output items
+  `{patternExpression, sampleMatches, numberOfMatches}` arrive **unsorted**
+  — sort client-side. The pattern drops straight into
+  `| filter matchesPattern(content, "<pattern>")` (validated live; invalid
+  patterns fail loud with ERROR_IN_PARSING_PATTERN, a rare non-silent DQL
+  error).
+
+### 1.12b Resource attributes vs record payload (dictionary source of truth)
+
+The semantic dictionary partitions attributes into **resource** context (what
+emitted the signal — host, k8s, cloud, language runtime) and **record payload**
+(the event's own data — a log's content/loglevel, a span's http/db/exception),
+and the record inspector uses this to order namespace groups (payload above
+resource above `dt.*` plumbing). Facts, validated live (OneAgent-fed tenant) and against the
+public [Dynatrace semantic dictionary](https://docs.dynatrace.com/docs/semantic-dictionary):
+
+- **The split is first-class in the dictionary but invisible in Grail.** The
+  dictionary distinguishes resource attributes from signal attributes.
+  **Grail records do not carry this marker** — OTLP resource attributes arrive as plain fields, so a custom
+  or non-well-known resource attribute is indistinguishable from payload at
+  query time. Any classification must therefore be a *heuristic over field
+  names*, degrading safely (unknown → treat as payload, never hide/label).
+- **Classification is per-group, not per-top-namespace.** A dozen first-dot
+  tokens straddle both sides — most importantly `http.*` (`http.server_name` is
+  resource, but `http.request.method` / `http.response.status_code` are span
+  payload). Others: `dt`, `os_service`, `device`, `browser`, `cics`, `zos`,
+  `aws`, `azure`, `cloud`, `faas`, `process`. Resolve by dominant use.
+- **We bake a static allowlist, no runtime dictionary dependency.** The
+  resource-namespace set lives in `catalog.ResourceNamespace`
+  (`internal/tui/catalog/namespaces.go`), derived once from the dictionary's resource attributes
+  (OTel-resource-convention aligned, so it tracks OTel for free).
+  Straddlers included as resource: `aws azure cloud faas process device browser
+  os_service`; excluded (stay payload): `http` (signal-dominant), `dt` (its own
+  plumbing tier), `cics`/`zos` (niche + mixed).
+- **It is an implicit ordering hint only** — never a UI label or section, never
+  an API surface. See `groupRank` in `internal/tui/inspector.go`. Because the
+  marker is absent in Grail, a labeled "resource attributes" section would lie
+  on any misfiled OTLP attr; reordering silently does not.
+
+### 1.13 API-backed table views (Spec.API)
+
+Views without a DQL substrate (SLOs, anomaly detectors) or with a non-DQL
+execution engine (log patterns) set `Spec.API` to a source name; sources are
+`func(ctx, scope, dql)` closures built in `sources.go` from the
+existing resource handlers and injected via `tui.Options.Sources` — `internal/tui`
+stays HTTP-free. Rules learned:
+
+- The composed `Spec.Query` output (when present) is handed to the source as
+  input — the patterns source analyzes it, so `/`-searches and facets keep
+  working on an analyzer-backed view. Sources that ignore the dql (slos)
+  must have `Query == nil`, which makes the table view refuse server
+  searches and facets **with a status message** instead of showing narrowing
+  pills that silently did nothing.
+- `Spec.Echo` supplies the command echo (`dtctl get slos`) since there is no
+  query to render. `CanScope` is false by construction when `Query == nil`.
+- The SLO API returns definitions only — no status/value/error budget. The
+  slos source runs the evaluation endpoint per SLO (parallel, bounded,
+  ~12s cap) and merges the first criteria's result; evaluation failures
+  degrade to blank cells, never errors.
+- The drill into patterns is view-level, not row-level: 'a' needs no
+  selection and inherits the view's FULL scope (entity, trace, pattern)
+  **and** its server searches/facets (`pushViewMsg.searches/.facets`) —
+  patterns describe the list you are looking at. ('g' was unavailable: it
+  is go-to-top.)
+- **Projection order matters for injected facets.** The analyzer's schema
+  demands the logQuery project `timestamp` and `content` — but a
+  `| fields` stage inside `Spec.Query` sits BEFORE the facet stages
+  `InjectStages` adds at the tail, so every inherited facet would filter a
+  projected-away (null) field and feed the analyzer zero records (found in
+  review). The projection is therefore appended by the source, after
+  composition (`catalog.LogPatternInput`); a trailing
+  `… | filter loglevel == "ERROR" | limit 300 | fields
+  timestamp, content` validates live (SUCCESSFUL).
+- Interactive facets stay disabled on API views even when they carry a
+  Query: the fetched records (patterns) are not the query's rows (logs),
+  so a record-attribute facet would inject a filter on a field the
+  pipeline never carries. Facets *inherited from the source list* apply
+  fine — they came from that pipeline.
+
+### 1.13b Documents (dashboards) & IAM user resolution
+
+The `dashboards` view is document-API-backed (`dashboardSource`,
+`document.Handler.List` with `DocumentFilters{Type:"dashboard"}` — the same
+call `dtctl get dashboards` makes). Facts learned building it:
+
+- **The document API drops trailing metadata unless you ask.** `labels` (the
+  UI's dashboard *tags*), `shareInfo.isShared`, `originExtensionId`,
+  `userContext.lastAccessedTime` are all omitted from list responses unless
+  named in `DocumentFilters.AddFields` — a *silent* omission (no error, the
+  field is just absent), the document-API cousin of the Grail
+  empty-result trap. `dashboardSource` requests `labels, shareInfo.isShared`.
+  Only these two add-field keys are tenant-validated; `userContext.*` is a
+  guess and a bad add-field key would error the whole call, so it is not sent.
+- **`ConvertToDocuments` is lossy — read `list.Documents` (the metadata)
+  directly.** The CLI `Document` read model drops the per-user `Access` levels
+  the API returns, so the source iterates the raw `DocumentMetadata`.
+- **A document `owner` is a user UUID, not a name.** There is no DQL path to
+  resolve it (no `dt.system.users`; `NamesQuery`/Smartscape covers entity ids
+  only). The route is the IAM REST handler (`iam.Handler.ListUsers`, filter by
+  `uuid`, batchable) — wired as the `resolve-users` source and called from the
+  inspector's `resolveOwners`. Resolution is **detail-view only** (the list and
+  preview keep the raw id) and scoped to `type=="dashboard"` records via
+  `catalog.DashboardUserIDs`.
+- **IAM often 403s on an environment token.** `ListUsers` hits
+  `/platform/iam/v1/organizational-levels/environment/{envID}/users`, which
+  needs account-level scope (`iam:users:read`) a plain tenant token frequently
+  lacks. The inspector surfaces the failure on the status line (silent would
+  look like a dead feature) and clears its request latch so `r` retries.
+- Sort documents by the `modificationInfo.lastModifiedTime` **instant**, not
+  the formatted RFC3339 string — non-UTC offsets sort lexically wrong.
+- **`DocumentFilters.ChunkSize==0` returns the first page only (~20), not
+  everything.** The handler paginates through `nextPageKey` *only* when
+  `ChunkSize>0`; at 0 it returns the first page and stops — so a tenant with
+  hundreds of dashboards silently shows ~20 (the API's default page size). This
+  is the pagination cousin of the add-fields silent-omission trap. `dtctl`'s
+  `--chunk-size` defaults to 500 for the same reason; `dashboardSource` sets
+  `ChunkSize: 500` to match.
+- **The default List (no `Owner`, no `admin-access`) returns what the *token*
+  can access — owned + shared-with-me — not the whole tenant.** The three
+  document-list scopes are: default = accessible; `DocumentFilters.Owner==me` =
+  strictly owned; `AdminAccess:true` = every tenant document (needs
+  `document:documents:admin`). The dashboards view exposes the first two as the
+  `all`/`mine` lenses (an API view, so it keys the server-side owner slice off
+  `Scope.Lens`, not a DQL `Lens.Filter`), echoing `dtctl get dashboards
+  [--mine]`. "me" is `session.Client.CurrentUserID()` (`/platform/metadata/v1/user`,
+  JWT-subject fallback) — same UUID space as a document's `owner`. It needs the
+  `app-engine:apps:run` scope and can't resolve on a platform token; the `mine`
+  lens surfaces that failure rather than silently listing everything, and the id
+  is memoized on success only so a later switch retries. `admin-access` is left
+  out — it 403s without admin scope for most tokens.
+
+### 1.14 GenAI spans — prompts, tool calls, and the dot namespace
+
+Validated live (box tenant, agent workloads):
+
+- **`gen_ai.operation.name`** discriminates `chat`, `execute_tool`, and
+  `invoke_agent` (semconv also defines `embeddings`/`text_completion`).
+- **Chat spans carry the whole exchange**: `gen_ai.input.messages`,
+  `gen_ai.output.messages`, and `gen_ai.system_instructions` are JSON
+  *strings* of `[{role, parts}]`; part types seen live: `text`,
+  `reasoning`, `tool_call` (`{id, name, arguments}`), and
+  `tool_call_response`. Roles: user / assistant / tool. Parse cost is real
+  (100 KB+ prompts) — per-row derivations must memoize (the genai lens
+  caches under a `__genai.*` record key; column Value funcs run every
+  render frame).
+- **Tool spans**: `gen_ai.tool.name` / `gen_ai.tool.call.arguments` /
+  `gen_ai.tool.call.result`. **Agent spans**: `gen_ai.agent.name`,
+  `gen_ai.conversation.id`.
+- **Token usage**: `gen_ai.usage.input_tokens` / `.output_tokens` plus
+  `gen_ai.usage.cache_read.input_tokens` / `.cache_creation.input_tokens`
+  — cache reads dwarf fresh input on agent workloads (fold them into the
+  "in" figure or it looks absurdly small).
+- **The Smartscape linkage breaks the lowercased-type rule**: GENAI_MODEL
+  entities stamp spans as `dt.smartscape.gen_ai.model` (likewise
+  `.provider`, `.service`, `.agent`) — a dot namespace, NOT
+  `dt.smartscape.genai_model`. `smartscapeField()` special-cases the
+  `GENAI_` prefix and `SpanScopable` includes it. The ids appear on spans
+  even when `smartscapeNodes "GENAI_*"` returns no nodes (observed live).
+  *(Not reproducible on OneAgent/OTel-demo tenants:* both `dt.smartscape.gen_ai.model` and the
+  wrong `dt.smartscape.genai_model` returned zero even on GenAI-span subsets —
+  neither tenant has populated GenAI Smartscape topology, so the dot-namespace
+  spelling remains validated only on the original tenant.)
+- **A second convention exists and dominates some tenants** (demo's
+  LangChain/Azure agents): NO `gen_ai.operation.name` — the discriminator
+  is `llm.request.type` (chat/completion/embeddings) — and the exchange
+  lives in flat numbered attributes: `gen_ai.prompt.N.role/.content`,
+  `gen_ai.prompt.N.tool_calls.M.name/.arguments`,
+  `gen_ai.completion.N.*`, with cache tokens under
+  `gen_ai.usage.cache_read_input_tokens` (underscore, not
+  `.cache_read.input_tokens`). The genai lens filter ORs both
+  discriminators; `GenAIInput/GenAIOutput` parse either shape into the
+  same message model (`FlatGenAIMessages`). These spans still carry the
+  `dt.smartscape.gen_ai.*` ids.
+- **GenAI spans rarely include trace roots** — a GENAI-scoped traces view
+  on the default roots lens is silently empty (found live: 225 matching
+  spans, 0 roots). `DefaultSpanLens` opens GENAI drills/tabs on the genai
+  lens instead.
+
+### 1.15 The session timeline (RUM waterfall)
+
+- One busy session held **16k request events vs 65 user actions / 61 view
+  summaries / 76 errors** — a session timeline must default to the journey
+  skeleton (`view_summary`, `user_action`, `navigation`, `error`) and keep
+  requests one lens away, or the story drowns in XHR noise.
+- **Nesting is time containment, not ids**: `dt.rum.view.id` and
+  `user_action.id` were null on the probe tenant. A `view_summary`'s
+  `start_time` is the view's *start* (its window spans the whole view), so
+  sorting `start_time asc` and nesting each event under the latest
+  view/action window that contains its start emits parents directly
+  before their children (`catalog.BuildSessionTimeline`).
+- **`trace.id` on request events is a plain 32-hex string** (nullable) —
+  it drops straight into the trace waterfall. That one field is the whole
+  frontend→backend bridge.
+
+### 1.15b RUM browser-side ids (Chrome deep-link extraction)
+
+Validated against the live astroshop demo site
+(the Chrome-extension deep-link spike, `docs/design/WEB_DEEPLINK.md`):
+
+- **The RUM generation decides the whole shape.** The astroshop demo is **Gen2 RUM**:
+  sessions/events live in `fetch user.sessions` / `fetch user.events`
+  (§1.12), keyed by `dt.rum.session.id` (format `<32 A-Z>-0`). There is **no
+  `bhv.*` / `fetch events` RUM data** here — that `bhv.name` / `characteristics.has_*`
+  world is **Gen3** (what internal Gen3-only
+  tooling parses). A deep-link rule's field + data object must match the target
+  tenant's generation; there is no single portable RUM field across both.
+- **The browser hands you the session id in the beacon URL, not a cookie or a
+  JS API.** The RUM agent posts its beacon to `<app-origin>/rb_...?...&vi=<SESSION_ID>&...`
+  and that **`vi` query param is exactly `dt.rum.session.id`** (confirmed:
+  `vi=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-0` returned that session's events in
+  Grail). This is why the extension's RUM source is `source:"request"`
+  (`webRequest.onBeforeRequest`, URL only — no body, no snappy). `window.dtrum`
+  exposes **no** session-id getter (checked its full prototype); the `dtCookie`
+  `sn_` value is a *different* hex id (the visit's server-side number), and
+  `dtPC` also carries the `vi` but the beacon URL is the clean surface.
+- **The browser-exposed trace id does NOT resolve to backend spans here.**
+  astroshop responses carry `server-timing: dtTrId;desc="<32-hex>"` and requests
+  a matching W3C `traceparent: 00-<same 32-hex>-…`, but that trace id returned
+  **0 rows** from `fetch spans` while the backend services' own spans carry
+  *different* `trace.id`s (dual OTel+OneAgent instrumentation, uncorrelated
+  trace ids). So a `trace` deep link off the browser header would **silently**
+  open an empty waterfall (the §1.11c / silent-empty trap) — the astroshop
+  example bundle deliberately ships no trace action. (Contrast §1.15: the
+  `trace.id` *field on a RUM request event in Grail* is the reliable bridge; the
+  *browser-header* trace id is not, on this deployment.)
+- The beacon-URL `tracestate` also embeds the RUM app id + `rxVisitor` + `vi`
+  (`…;0123456789abcdef;<rxVisitor>;AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-0;1`), but
+  the `vi` query param is the simplest extraction point.
+
+### 1.16 Log-pattern expressions carry named exports
+
+`LogPatternExtractor` names every variable matcher in its
+`patternExpression` — `'LISTEN ' DQS:f_1`, `'SELECT ' DATA:f_1` — so the
+same expression works as **both** the `matchesPattern(content, P)`
+predicate and a `| parse content, P` stage (validated live: `f_1` comes
+back as a real field, DQS with the quotes already stripped). Detecting
+exports requires stripping single-quoted literals first — a literal
+`'FOO:bar'` is not an export (`catalog.PatternExports`). Pure-literal
+patterns extract nothing and keep the standard log columns. Search
+injection stays legal (it lands before the parse stage) and facet filters
+compose after it, so parsed fields are facetable.
+
+### 1.17 OAuth expiry in a long-running TUI
+
+The executor's `OnUnauthorized` hook only guarded the **poll loop** — the
+initial `query:execute` had no 401 handling, so a TUI idling past the
+access token's lifetime failed its next query with "JWT token expired".
+The fix sits one layer down, in `pkg/client`: a resty retry condition
+that, on 401, re-resolves the token through the OAuth manager (forcing a
+refresh when the local cache still looks valid — clock skew, compact
+keyring storage), swaps it in, and retries once. Unchanged tokens (static
+API tokens, dead credentials) surface the original 401 with no retry, and
+a token refreshed seconds ago that is rejected again stops the loop.
+Every consumer of the shared resty client — DQL execute + poll, the SLO
+evaluation fan-out, Settings, the analyzer — inherits the fix
+(`Client.EnableTokenRefresh`, wired in `NewFromConfig`).
+
+### 1.18 The edge fleet — OneAgents, ActiveGates, and FLEET_EVENT
+
+The observability edge is itself queryable *(validated OneAgent-fed tenant)*:
+
+- **`smartscapeNodes "ONEAGENT"`** — one node per agent. Thin: `name` (=host
+  name), `dt.agent.module.version`, `dt.agent.monitoring_mode` (`FULL_STACK` /
+  `INFRASTRUCTURE` / `DISCOVERY`), `dt.network_zone.id`, `k8s.cluster.name`,
+  `lifetime`. Node id `ONEAGENT-<hex>`.
+- **`smartscapeNodes "ACTIVEGATE"`** — richer, but field families are
+  **duplicated** across schema eras: prefer `dt.active_gate.version` /
+  `dt.active_gate.group.name` and fall back to the older `version` /
+  `dt.activegate_group` (some records carry only one set). Also `purpose`,
+  `modules[]` (`METRICS_INGEST`, `AGENT_ROUTING`, `KUBERNETES`, …), `os.*`,
+  `is_containerized`, `is_fips`, `ip[]`. Node id `ACTIVEGATE-<hex>`.
+- Both types are auto-derived by `smartscapeField` (→ `dt.smartscape.oneagent`
+  / `dt.smartscape.activegate`), so `SignalFilter` scopes them with no special
+  case; neither has a `legacyField`.
+
+**FLEET_EVENT** (`fetch events | filter event.kind == "FLEET_EVENT"`) is the
+per-agent state stream. Two `event.type`s seen:
+
+- **`ONEAGENT_METADATA`** (the bulk — ~195k rows / 2h) — a **per-module
+  heartbeat** at **~5min cadence** (validated OneAgent-fed tenant: one agent's 7 modules emitted
+  14 rows in 10min), so counting raw rows overcounts modules; dedup by
+  `{dt.smartscape.oneagent, dt.agent.module.id}`. Carries
+  `dt.agent.module.{name,type,version,health,injection_mode,first_seen}`,
+  `dt.agent.installer_version` (the authoritative full-agent version),
+  `dt.agent.monitoring_mode`, `dt.agent.live_debugger.enabled`, `os.*`,
+  `dt.process_group.id`, `k8s.namespace.name`, `host.name`, `dt.host_group.id`,
+  `aws.*`, and the join keys `dt.smartscape.{oneagent,host,process}` +
+  `dt.smartscape.activegate` (the AG the agent routes through). Health word is
+  `Healthy` (not in `ClassLevel`'s map — needs its own class func).
+  `dt.agent.module.id` is a **`uid`**, not a string: a plain-string `==` /
+  `in()` compare silently returns empty (§1.2) — group by it, don't string-match
+  it.
+- **`ACTIVEGATE_ONLINE`** — sparse online notices: `event.name`,
+  `event.severity` (`INFO`), `dt.active_gate.id`, `dt.smartscape.activegate`.
+
+**Latest-state, NOT `sort timestamp desc | takeFirst`.** The obvious "dedup to
+newest emission" form (`sort timestamp desc | summarize {…=takeFirst(…)}`)
+forces Grail to order the whole scanned window and **blows the 10s scan limit on
+a busy tenant** — validated OneAgent-fed tenant: a *scoped* 30m sort+takeFirst timed out
+incomplete. Instead **stream**: `summarize { seen = takeMax(timestamp), … =
+takeAny(…) }, by:{…}` — no global sort. Over a short window the descriptive
+fields (`health`, `version`, …) are stable across the ~5min heartbeat, so an
+arbitrary in-window sample (`takeAny`) is the module's current value;
+`takeMax(timestamp)` tracks freshness. This turned the fleet-wide dedup from a
+timeout into **~100ms over 1.2M records** (8k+ modules / 2.3k agents).
+
+The fleet view (`fleet.go`) uses this three ways, all window-**capped at 30m**
+(`fleetStateWindow`; ~6 heartbeats — every live module appears — and the scan
+stays a few M records) because `fetch events` scans the whole window regardless
+of the downstream summarize (§1.11c) — these are latest-state lookups, not
+history:
+
+- **oneagents lens** — folds the deduped per-agent module rollup onto the
+  Smartscape list rows via the batched `Enrich`,
+  `in(dt.smartscape.oneagent, {toSmartscapeId(…)})` (the id is a
+  `smartscape_id`; a plain-string `in()` silently returns empty, §1.2).
+- **modules lens + `:modules` view** — a deduplicated module inventory, one row
+  per injected **module instance**. Grain facts validated live:
+  `dt.agent.module.id` identifies one module *load*, tied to a process launch —
+  it is **not** a stable logical-module id and **not** per-emission. A
+  short-lived process relaunching yields many ids (each a distinct
+  `startup_timestamp`); one process can carry **several modules at once**
+  (`dt.smartscape.process` repeats across rows), so never collapse by process.
+  The summarize keeps the **full event under its original field names**
+  (`fleetModuleState`, backticked dotted aliases — DQL needs them for a dotted
+  output name) so the record inspector groups the module's fields by namespace
+  exactly like the raw event; a module is not a node, so this summarized record
+  *is* its detail. Entering a module row therefore opens the **module detail
+  page** (`newModuleDetailView`, routed by `Spec.Inspect` on the fleet + modules
+  specs): its **first tab is that static record inspector** — no fetch-on-open,
+  so navigating in never refetches the monitored process's Smartscape node and
+  "flips" the screen — alongside the module's own **agent logs** (§1.19) and
+  **events** tabs, both scoped to the monitored process. The process/host/agent
+  are navigable links inside the record tab, and the row's `Entity` resolves to
+  the process so those tabs, the 'v'/'l' drills, and Selection scope by it. The
+  `modules` spec is registered top-level and wired as the `ONEAGENT` detail tab
+  (`containmentTabs`), where the query composes the pinned agent's
+  `dt.smartscape.oneagent` (or a host's `dt.smartscape.host`).
+- **events `fleet` lens** — the raw ONEAGENT_METADATA stream (strictly that
+  type; ACTIVEGATE_ONLINE is excluded — AG state lives on the node).
+
+**Edge components are not workloads.** An edge component is **no metric
+dimension** (validated OneAgent-fed tenant), so `IsEdgeComponent` drops the metrics detail tab
+for both types. It carries no *workload* log records under the generic
+`SignalFilter` either (the scoped logs query scanned 20GB to return zero —
+agent logs carry no `dt.smartscape.oneagent`/`activegate` field), but it **does**
+emit its own agent log files, surfaced through a dedicated logs tab (§1.19). The
+`ONEAGENT` detail page is `details / modules / logs / events / problems /
+related`; its **events tab opens on the `fleet` lens** (`DefaultEventLens`) so
+the FLEET_EVENT stream renders with module columns rather than empty Davis
+columns. An `ACTIVEGATE` carries its whole state on the node record, so its
+detail page is `details / logs / problems / related`.
+
+### 1.19 Agent logs — the OneAgent/ActiveGate self-logs (`agentLogsSpec`)
+
+With **agent log monitoring** enabled (a per-tenant / per-host setting — OneAgent-fed tenant has
+it, many tenants do not), Dynatrace ingests the edge components' **own** log
+files. These are distinct from the application/infrastructure logs of the
+processes a OneAgent injects into, and conflating the two is the trap to avoid.
+
+**The anti-conflation key is the `log.source` path prefix `/var/log/dynatrace/`**
+*(validated OneAgent-fed tenant)*. Every agent log file lives there; the only trees are
+`oneagent/`, `gateway/`, `synthetic/`, `sc2/`. This prefix excludes both the
+injected workloads' app logs (under the app's own paths) **and** other vendors'
+agents that merely match the word "agent" (`/var/log/amazon/ssm/…`,
+`/var/log/aws-routed-eni/network-policy-agent.log`). Never scope agent logs by a
+`contains(log.source, "agent")` — it conflates all three.
+
+Agent logs carry **no** `dt.smartscape.oneagent`/`dt.active_gate.id` field —
+only the host/process that emitted them — so `SignalFilter(OneAgent)` matches
+nothing. `agentLogFilter` composes the right scope per entity type instead:
+
+- **OneAgent (combined, all modules)** — `dt.smartscape.host ==
+  toSmartscapeId(HOST-<x>) and startsWith(log.source,
+  "/var/log/dynatrace/oneagent/")`. The `ONEAGENT-<x>` id shares its hex suffix
+  with the `HOST-<x>` it monitors *(validated OneAgent-fed tenant: 2319/2319 agents; every node
+  also has a `monitors.host` reference)*, so the host id is a pure string
+  rewrite of the agent id. Returned 41k lines / 10 module files for one host.
+- **Module (per injected module)** — `dt.smartscape.host ==
+  toSmartscapeId(HOST-<x>) and startsWith(log.source,
+  "/var/log/dynatrace/oneagent/<subdir>/")`, where `<subdir>` is derived from
+  `dt.agent.module.type` (`moduleLogDir`: `log_analytics`→`loganalytics`,
+  `os`→`os`, `java`→`java`, `go`→`go`, `python`→`python`, `nginx`→`nginx`,
+  `nodejs`→`nodejs`, `sdk`→`sdk`, `remote_plugin`→`plugin`). **Do NOT scope a
+  module row by the process id it resolves to** — the earlier belief that a
+  module's logs are stamped with the module's resolved `dt.smartscape.process`
+  was **wrong** *(re-validated OneAgent-fed tenant 2026-07-16)*. A module's log files are stamped
+  with the module's **own agent process** (e.g. PGI named "OneAgent log
+  analytics"), a churny id that relaunches independently and only **~36%** of
+  which match the process the `ONEAGENT_METADATA` snapshot carries (join over
+  8846 metadata procs → 3143 in any oneagent log record). That id can even be a
+  dead PGI that resolves to no entity. Net effect: process-scoped module log
+  tabs were empty **most of the time** (the reported `oneagentloganalytics`
+  bug), even though the logs exist and are voluminous (loganalytics is the OneAgent-fed tenant's
+  highest-volume oneagent subdir). Host + subdir is the only stable join —
+  neither the process id nor the process *group* joins the two sides. The
+  trade-off: a host running several same-tech processes shows all of that tech's
+  module logs on the host (one subdir), which is acceptable and beats empty.
+  Still do **not** narrow by `dt.agent.module.name` in the filename — the module
+  name and the log-file token diverge (module
+  `Cassandra_cassandra-cluster_Cassandra_dev` → file `ruxitagent_Cassandra_dev-#`),
+  so `contains(log.source, module.name)` silently returns empty (§1.2 trap). An
+  unmapped `module.type` (e.g. `z`) leaves `ModuleLogDir` empty and falls back to
+  the best-effort process filter — no worse than the old behavior.
+- **ActiveGate** — `host.name == <node name> and startsWith(…/dynatrace/) and
+  not startsWith(…/oneagent/)` (i.e. `gateway/` + `synthetic/` + `sc2/`). Gateway
+  logs carry only the host running the AG (**never** `dt.active_gate.id`; the
+  metadata `dt.smartscape.activegate` is the many-hosts *routes-through*
+  relation, useless for locating the AG), so there is **no reliable node→host
+  link**. Matching the AG node name to the log `host.name` resolves
+  **standalone/dedicated ActiveGates** (node name == host name — validated OneAgent-fed tenant:
+  1803 gateway lines for `ip-10-0-0-1.ec2.internal`); **containerized AGs**
+  (pod name ≠ k8s-node host.name) have no handle and honestly show nothing.
+
+`agentLogsSpec` is `KindSignal`; an unscopable entity collapses to `filter
+false` (never a fleet-wide scan — agent logs, esp. `oneagent-logmon-detailed.log`,
+are voluminous). It backs the `logs` detail tab for both edge types (kept under
+the `logs` name so `l` still jumps to it), the `logs` tab on the **module detail
+page** (§1.18, host + subdir-scoped), and the `l` drill on fleet node / module rows.
+
+### 1.20 Log stream ordering & cap — head/tail is a re-fetch, `limit` is post-scan
+
+The logs views (`logsSpec`, `agentLogsSpec`) share one sort+limit tail,
+`catalog.LogTail(Scope)`, so the raw reader's controls are pure DQL, not client
+state:
+
+- **Head vs. tail is the `sort` direction, so it re-fetches.** Tail (the default)
+  is `sort timestamp desc | limit N` — the newest N; head is `sort timestamp asc`
+  — the oldest N. `K`/`J` client re-sort only reorders the *already-fetched* page,
+  so it can never turn the newest N into the oldest N; the reader's `T` toggle
+  flips `Scope.LogHead` and issues a new query. Both are timeframe-bounded — head
+  is the oldest records *in the window*, not "the start of the file."
+- **Raising the cap is cheap.** `Scope.Limit` (the reader's `+` steps 300 → 1000
+  → 3000 → 10000) changes only `| limit N`, which is applied **after** the scan —
+  the same principle as §1.11c (a `filter` narrows the *result*, not the *scan*).
+  So "load more" grows the rows held and rendered, not the GB Grail reads; the
+  scan cost is set by `from:`/`to:` and scope, which is why logs stay entity-gated
+  regardless of cap. *(Consequence of §1.11c; not separately tenant-timed.)*
+
+### 1.21 Primary Grail tags & the service metric-backed list
+
+Validated on tenants demo tenant A (primary tags `app`/`env`/`version`) and demo tenant B
+(`service_detection`). See `docs/design/primary-grail-tags.md` for the full design.
+
+- **Primary tags are flat dotted fields `primary_tags.<key>` — one notation
+  everywhere**, on signals (spans, logs, `dt.davis.events`) *and* on
+  `smartscapeNodes` records. There is **no** `primary_tags` map: on demo tenant B,
+  `` primary_tags[`service_detection`] == … `` matched 0 while flat
+  `primary_tags.service_detection == …` matched 16 on `smartscapeNodes "PROCESS"`.
+  `filter`, `fieldsSummary … topValues`, and `fields`/`fieldsKeep` all work on them.
+- **Absent-key projection is null-safe — there is no `FIELD_DOES_NOT_EXIST` trap
+  for `primary_tags.*`.** Re-verified on demo tenant A *and* demo tenant B, spans/logs/events:
+  `| fields x = primary_tags.<absent>`, `| fieldsKeep …, primary_tags.<absent>`,
+  and even `| fieldsKeep …, <totally-unknown-field>` all return rows with a null
+  cell, no error. `FIELD_DOES_NOT_EXIST` is reserved for genuinely-unknown *schema*
+  fields (`dt.system.bucket` on a non-bucket table §1.10, `dt.entity.*`), not
+  nested field access. So column projection needs no signal-vs-node branching.
+- **The record JSON key is flat: `"primary_tags.app": "value"`** (validated demo tenant A, raw
+  `smartscapeNodes "PROCESS"` record) — *not* a nested `primary_tags:{app:…}` object. So a
+  `Column.Text` map-lookup on the literal key `"primary_tags.app"` reads it directly.
+- **Special-char keys: backtick the WHOLE path.** `` `primary_tags.cost-center` `` parses,
+  is null-safe, and matches real values (validated demo tenant A: `` `primary_tags.app`=="demo-app" ``
+  → 5, identical to bare). Segment-backticking `` primary_tags.`cost-center` `` is a
+  **PARSE_ERROR** ("isn't allowed here"). `catalog.escapeField` (facets.go:131) already emits
+  the correct form: `bareField` regex allows dots so `primary_tags.app` stays bare, while a
+  hyphen/colon key falls through to whole-path backticks. So `escapeField("primary_tags."+key)`
+  is correct for any customer key — no special helper.
+- **`takeAny(primary_tags.<key>)` works in a `smartscapeNodes` summarize** (validated demo tenant A
+  PROCESS `by:{id}`): the null-ignoring carry-through for projection-based node specs.
+- **Which entities carry populated tags is customer/environment config, not a feature
+  property — the mechanics above are tenant-agnostic (work on `HOST` and anything else).**
+  The fields exist null-safe everywhere; populated only where enriched. Caveat on the
+  validation tenants: demo tenant A (and demo tenant B, which currently points at the same environment) are
+  **host-less k8s demos**, so they happen to show tags on `PROCESS`/`SERVICE` metrics/`spans`
+  (~62%)/`dt.davis.events` and empty on `CONTAINER`/`K8S_POD`/`K8S_DEPLOYMENT`/`logs`. That is
+  an artifact of those tenants — says nothing about hosts or other types elsewhere. Columns/
+  facets render present-but-empty where unpopulated; tests should assert the column/facet
+  *exists* + shows values on an enriched type, not hard-code which types are enriched.
+  Cross-tenant evidence: on demo tenant B (distinct tenant, 6 real `HOST` nodes) `primary_tags.*` is
+  **queryable + null-safe on `HOST`** (unpopulated there, no error) — so no host-specific path
+  is needed — and demo tenant B **logs carry `service_detection` (~42%)** while demo tenant A logs carried
+  none, and demo tenant B HOST/CONTAINER/SERVICE are null for it. Population varies by tenant *and*
+  key; the mechanics don't.
+- **Services carry no filterable node dimensions — use the four service metrics**
+  (`dt.service.request.count`, `dt.service.faas_invoke.count`,
+  `dt.service.messaging.process.count`, `dt.service.request.service_mesh.count`). The
+  services list is the **`metrics` command collapsed one-row-per-service *server-side***:
+  `... | summarize name=takeAny(dt.service.name), <K>=takeAny(primary_tags.<K>) …,
+  by:{dt.smartscape.service}`. The `metrics` command scans series *descriptors*, not
+  datapoints — **Scanned bytes: 0** on demo tenant A for the full collapse. `summarize` is the
+  pushdown-friendly aggregation (Grail optimizes it; it reduced 54 series → 15 rows
+  server-side); **`dedup` is worse** — a blocking full-materialization op that bypasses
+  that optimization. `id == dt.smartscape.service` (validated demo tenant A).
+- **Two-pass, keys discovered not enumerated.** Pass 1 scans the sampled series' field
+  names (`discoverDims`-style) for the `primary_tags.` prefix → the service primary-tag
+  keys. Pass 2 names *only* those keys + the identity dim in `takeAny`/`by:` and **drops
+  every other dim by omission** (no maintained remove-list; exploding dims `endpoint.name`,
+  `rpc.grpc.status_code`, `failed`, `k8s.*` never grouped). So keys are a *result* fed
+  into the query at runtime, never hardcoded.
+- **`takeAny` is null-ignoring — collapse to exactly one row per service.** A service's
+  series are a mix of tagged and null-tagged; grouping *by* `primary_tags.*` fragments it
+  (validated demo tenant A: 15 services → **19 rows**, one per service all-null). Aggregating the
+  tags with `takeAny(primary_tags.<K>)` grouped by `dt.smartscape.service` only collapses
+  to **exactly 15** and fills each tag from the non-null series (`orbit-ai`/`rpc-target`/
+  `mock-llm` surfaced real `demo-app/demo/0.1.0`).
+- **Name = `getNodeName(dt.smartscape.service)`, resolved post-collapse** — the canonical
+  resolver per the `dt-dql-essentials`/`dt-obs-services` skills (a smartscape id renders as
+  an id, not a name). Validated demo tenant A: matches `takeAny(dt.service.name)` on every service
+  and doesn't depend on the `dt.service.name` dimension being present. Applied to the ~15
+  collapsed rows (`| fieldsAdd name = getNodeName(...)`), so it's cheap.
+- **Prefer the `metrics` command over `timeseries` for a discover-the-tags roster.** The
+  services skill lists via `timeseries …, by:{…}`, but `timeseries` computes datapoints and
+  needs every `by:` dim named (would enumerate tag keys up front). The `metrics` command
+  returns series *descriptors* (all dims as fields, **0 datapoint bytes**), so tag keys are
+  discovered not enumerated and the collapse reads nothing. RED sparklines still use
+  `timeseries`/Enrich.
+- **Facet/search `| filter` injects PRE-`summarize`** (on the raw series, narrowing which
+  feed the collapse): validated demo tenant A `| filter primary_tags.app == "demo-app"` → 8 of
+  15. Normal pipe injection ahead of the trailing `summarize` — no `timeseries filter:{}`
+  argument seam, no client-side group-by. (A metric-union *can* be `join`ed to
+  `smartscapeNodes` with `on:{ left[dt.smartscape.service] == right[id] }` — join equalities
+  need `left[]`/`right[]` refs, bare `field == field` errors
+  `JOIN_CONDITION_IN_EQUALITY_HAS_TO_BE_LEFT_OR_RIGHT` — but the chosen design needs neither.)
+- **The service filter surface = the dimensions present on those four metrics** — a
+  **subset** of DT's global field picker (on demo tenant A: `primary_tags.*`, `cloud.provider`,
+  `aws.region`/`aws.account.id`, `azure.location`, `gcp.region`, `http.response.status_code`,
+  `k8s.cluster.name`/`namespace.name`/`workload.name`/`workload.kind`). A field not on
+  these metrics can't filter services (`gcp.project.id` is in DT's picker but not a
+  service-metric dim; `isNotNull` of an absent dim returns 0 silently). Everything the
+  picker shows actually filters.
+- **`/` search on the services view** cannot emit `| search` (not usable on `metrics`).
+  Emulate it as a `| filter (contains(<dim>, "term", caseSensitive:false) or …)` pipe over
+  the scanned dims. Use **`contains`, not `matchesValue`/`matchesPhrase`** — per the
+  authoritative DQL guide `matchesValue` is *array*-field-only (`dt.tags`) and `matchesPhrase`
+  is token/phrase-only (`dem` misses `demo-app` → 0 on demo tenant A). `contains(dt.service.name,
+  "rpc", caseSensitive:false) or contains(primary_tags.app, "rpc", …)` reproduced the search
+  exactly on demo tenant A (→ rpc-probe, rpc-target) and gives the substring/case-insensitive
+  semantics the tool's `search "*term*"` wrap relies on (§1.10). (`matchesValue` on a scalar
+  *happened* to work on demo tenant A, but it's unsupported for scalars — don't rely on it.)
+
+#### 1.21.1 Services list — revised to the production services-app shape (validated demo tenant A 2026-07)
+
+The dtctl services list was reworked to **mirror the shape of the Dynatrace services app** (whose
+query any user can inspect via the app's own "open in notebook"). This **supersedes** the `metrics`-command bullets above (the `metrics | summarize
+takeAny(...)` collapse, "prefer `metrics` over `timeseries`", "no `timeseries filter:{}` seam", and
+"`| filter` PRE-`summarize`"). The primary-tag *field* mechanics above (flat dotted key, null-safe,
+backticking, JSON key shape) are unchanged. Discovery (pass 1) is unchanged: `metrics from:<tf> |
+filter in(metric.key,{4}) | limit 200`, scan record keys for dims + `primary_tags.*` (validated demo tenant A
+returns `app/env/environment/version`, `service.name`, `dt.service.name`, `k8s.*`, `cloud.provider`,
+`aws.*`, `azure.location`, `gcp.region`, `http.*`, `rpc.*`, `telemetry.sdk.language`).
+
+The **list query is one `timeseries` roster joined to `smartscapeNodes`** (validated demo tenant A, one row
+per service):
+
+```
+timeseries { req=sum(dt.service.request.count, scalar:true), faas=…, msg=…, mesh=… },
+  union: true,
+  by: { dt.smartscape.service, dt.service.name, service.name, `primary_tags.<k>`, … },
+  filter: { isNotNull(dt.smartscape.service) [ AND <conds> ] }
+| summarize { dt.service.name=takeLast(dt.service.name), service.name=takeLast(service.name),
+    `primary_tags.<k>`=arrayToString(arrayRemoveNulls(collectDistinct(`primary_tags.<k>`)), delimiter:", ") },
+    by:{ dt.smartscape.service }
+| lookup [ smartscapeNodes "SERVICE" | fields id, name, lifetime, dt.service_detection.version ],
+    sourceField: dt.smartscape.service, lookupField: id, fields:{ name, lifetime, dt.service_detection.version }
+| fieldsAdd id=dt.smartscape.service, name=coalesce(name, dt.service.name, service.name, getNodeName(dt.smartscape.service))
+| fieldsRemove req, faas, msg, mesh | sort name asc | limit 500
+```
+
+- **`scalar:true` + `union:true`** = a cheap one-value-per-series roster over the 4 metrics; unioned
+  so any-of-4 reporting services appear (timeframe-dependent list, by design).
+- **`filter:{}` (the timeseries argument) narrows PRE-aggregation and CAN reference fields not in
+  `by:`** — validated demo tenant A: `k8s.workload.kind == "deployment"` (not in `by:`) → 16 rows; the
+  services app filters `matchesValue(primary_tags.team,"broker")` likewise. So **every discovered
+  dim is filterable** via `filter:{}` regardless of `by:`; only `by:`+`summarize`/lookup fields
+  survive into the row (columns/peek). Filter surface and display surface are decoupled.
+- **Dotted backtick summarize alias `` `primary_tags.app` = arrayToString(arrayRemoveNulls(
+  collectDistinct(...))) `` parses and populates**; the record key is flat `"primary_tags.app"`.
+  `takeAny` (null-ignoring) is the aggregation for primary-tag keys — they are ownership metadata,
+  consistent across a service's series; a series lacking the tag simply contributes null which
+  `takeAny` skips. The result is null for a service with no tag value on any series → peek/inspector
+  skip it. `collectDistinct+arrayToString` would also work but is unnecessarily complex here.
+- **`lookup [ smartscapeNodes "SERVICE" … ], sourceField:dt.smartscape.service, lookupField:id`
+  works** and brings `name`/`lifetime`/`dt.service_detection.version` in the same query — no
+  join-equality `left[]==right[]` needed (that's for `join`; `lookup` uses source/lookupField). This
+  is the "one query for the list + peek + SEEN" the design's separate-enrich note (above) avoided;
+  the lookup is the validated, simpler path.
+- **Value picker** = `metrics from:<tf> | filter in(metric.key,{4}) | fieldsSummary <dim>,
+  topValues:250` (validated demo tenant A: `primary_tags.app` → demo-app 124 / demo-app-2 6 / null 88 —
+  the null bucket is dropped by `ParseFieldsSummary`).
+- **`filterSegments` DOES scope a `timeseries` roster**: demo tenant A unscoped 19
+  services → `-S 0123456789A?k8s.namespace.name=demo-app` → 16.
+- **Not exercised:** `getNodeName` fallback for a metric-only service with no smartscape node (none on
+  demo tenant A; `lookup.name` was non-null for all) — low-risk residual.
+- **`filter:{}` boolean composition (validated demo tenant A):** compound facet legs (`a == x or a == "x"`)
+  must be **parenthesized** when ANDed into `filter:{ isNotNull(...) AND (…) }` — else the `or`
+  mis-binds. `matchesValue(dim, "*api*")` works in `filter:{}`.
+- **`contains` on a non-string dim is silent-empty, not an error.** `filter:{ … AND
+  contains(http.response.status_code, "20") }` → `{"records":[]}` (exit 0) on demo tenant A; wrapping
+  `contains(toString(http.response.status_code), "20")` → real rows. So the services `/` search
+  contains-chain must `toString()` every dim (a rare deliberate `toString()` — §1.10 avoids it on
+  facet fields for index reasons, but here correctness over a descriptor scan wins).
+
+### 1.22 K8s labels/annotations live in `tags:` maps, faceted by map-key index
+
+Validated live on a k8s scale tenant (~50k `K8S_POD` nodes), via `dtctl query`.
+
+> **Current mechanism is §1.4b** (`Facet.MapField/MapKey` + tag discovery). The
+> `Spec.FacetMaps` + projected-`labels`-alias plumbing this section originally
+> described is **historical** — that field no longer exists. Everything else
+> below (manifest-strip trap, backtick-every-key rule, which lists carry the
+> maps, `FacetPriority`/tail ordering) is still accurate and still cited by
+> live code; the two mechanism bullets are flagged inline.
+
+- **Labels/annotations are NOT in the parsed manifest — they are stripped.**
+  `| parse k8s.object, "JSON:obj"` then `obj[metadata][labels]` / `[annotations]`
+  is **silent-empty** (type `undefined`, absent from every record) — the classic
+  §1.4 trap. `obj[metadata]` carries only `name`/`namespace`/`uid`/`ownerReferences`/…
+  The smartscape manifest omits the label/annotation blocks.
+- **They live in the tag maps `` `tags:k8s.labels` `` and `` `tags:k8s.annotations` ``**
+  (record/map type, backtick-quoted for the colon — same field family the nodes
+  spec already reads for `instance`/`zone`, `k8s.go`). Populated on all pods on the
+  scale tenant. This is the same source dtctl/UI use for node labels (§1.1-adjacent).
+- **Faceting an arbitrary label/annotation KEY** *(historical mechanism —
+  superseded by §1.4b, which filters `` `tags:*`[`key`] `` off the raw row via
+  a stripped pipeline instead of projecting an alias)*: project the map through
+  the summarize, then index it post-summarize. Full round-trip validated on
+  `smartscapeNodes "K8S_POD"`:
+  - Project: `` labels = takeFirst(`tags:k8s.labels`) `` inside the pod
+    `| summarize {…}, by:{id}` — survives as a map field.
+  - Value picker: `` | fieldsSummary labels[`app.kubernetes.io/name`], topValues:N ``
+    returns top values post-summarize (null bucket dropped by `ParseFieldsSummary`).
+  - Applied facet: `` | filter labels[`app.kubernetes.io/name`] == "oneagent" ``
+    narrows correctly (post-summarize, before the sort/limit tail per §1.10).
+- **Map-key references need the KEY backtick-quoted, always.** `` labels[`tier`] ``
+  and `` labels[`app.kubernetes.io/name`] `` both work; a bare dotted key
+  (`labels[app.kubernetes.io/name]`) would mis-read the dots as nested access.
+  `catalog.escapeField` was extended to recognize a `base[key]` map-index ref and
+  emit `` base[`key`] `` (base bare/backticked per its own chars, every key
+  backtick-quoted) — distinct from the whole-path backticking it does for
+  `tags:…`/`primary_tags.cost-center`. Values reuse `Facet.Stage`'s type-shaped
+  legs unchanged (a `"38"` pod-template-generation value gets the integer legs).
+- **The facet picker discovers keys, never enumerates them (§1.10 spirit).**
+  *(Historical plumbing — `Spec.FacetMaps` is gone; discovery now runs off the
+  tag census feeding `Facet.MapField/MapKey`, §1.4b.)* The old form:
+  `facetCandidates` explodes a `map[string]any` record field named in
+  `Spec.FacetMaps` into `field[key]` candidates from the keys present in the
+  fetched sample; the typed-field escape hatch still reaches keys outside the
+  sample. Either way no label/annotation key is hardcoded — arbitrary customer
+  keys are reachable via the existing `f` picker.
+- **Which k8s lists carry the tags (validated live, per-type `countIf(isNotNull)`):**
+  `K8S_POD`, `K8S_DEPLOYMENT`/`STATEFULSET`/`DAEMONSET` (workloads), `K8S_NAMESPACE`,
+  and `K8S_NODE` are 100% populated; **`K8S_CLUSTER` carries none** (0/1). So the
+  pods/workloads/namespaces/nodes specs project the maps (for the peek + tag
+  discovery, §1.4b); clusters do not. Two projection shapes, both
+  round-trip-validated:
+  `takeFirst(`tags:k8s.labels`)` inside the pods `summarize`, and bare
+  `labels =`tags:k8s.labels`` in the `| fields` projection the other three use
+  (the tag map is a direct field — no `| parse k8s.object` needed for it).
+- **De-noising the picker — `Spec.FacetPriority` + a map-key tail.** Exploding
+  labels/annotations floods the candidate list, so `facetCandidates` orders it:
+  bucket field → `FacetPriority` (preselected dims present in the sample, in
+  order) → alphabetical scalars → the map-key tail (grouped by `FacetMaps`
+  position, so labels precede annotations). The picker draws a
+  `labels / annotations` divider before the tail. **Keep `FacetPriority`
+  scalar-only** — pinning a map key there strands it in the curated block above
+  the plain scalars and mislabels the divider (the divider marks the *discovered*
+  key tail, so it skips any priority-pinned map key). Curated per k8s spec (pods
+  pin namespace/phase/node/workload/kind; workloads namespace/kind/type; nodes
+  instance/zone/cluster; namespaces cluster).
+
+### 1.23 GenAI/agent apps carry business ids as gen_ai span attributes
+
+Validated live on a Gen3 tenant via `dtctl query` (7d window), in support of the
+web-page deep-link feature (`docs/design/WEB_DEEPLINK.md`). The tenant-specific
+field names below belong in the app's own imported rule bundle, not in this
+repo — the pattern is what generalizes.
+
+- An agent app emits OTel gen_ai spans into the `spans` table stamped with its
+  business ids as **span attributes**, not entity properties — e.g.
+  `<app>.session_id`, `<app>.task_id`, `<app>.conversation_id` (alongside the
+  standard `gen_ai.conversation.id`, `gen_ai.agent.id/name`,
+  `gen_ai.operation.name` = invoke_agent | execute_tool).
+- Such attribute filters return **non-empty** under
+  `fetch spans, from:… | filter <field> == "<id>"` (confirmed against real ids —
+  the field names are real, not the silent-empty trap). These are plain
+  attribute filters (a scan, so keep the timeframe bounded).
+- Each such span also carries the executing pod inline: `k8s.pod.name` and
+  `dt.smartscape.k8s_pod` (a `K8S_POD-…` Smartscape id). So "the pod that ran
+  this session" is one drill off the filtered span list — no separate join.
+- **Deep-link target is `traces`, not `genai`.** The `genai` spec is a
+  Smartscape *node* list (`smartscapeNodes "GENAI_AGENT"…`) with no span
+  attributes — a business-id facet on it silently matches nothing. The
+  `traces` spec (`fetch spans`) is where the facet composes and Enter opens the
+  waterfall.
+- **Some apps put base62-encoded UUIDs in their URLs.** A URL may carry a
+  short id — e.g. `…/chat?id=conv_<22ch>` — where `<22ch>` is the span-attribute
+  UUID encoded in **base62 with the `0-9A-Za-z` alphabet**, big-endian over the
+  16 UUID bytes. Decoding round-trips exactly (validated both directions against
+  a live tenant), so a chat/investigation URL maps to a `traces` facet with
+  **no DOM scraping** — decode the short id, filter the business-id field. (When
+  the canonical UUID isn't in the page's static DOM, URL-decode is the robust
+  path.) The extension implements this as a rule `decode: "base62-uuid"`
+  transform (`extension/content.js`, `default-rules.js`).
+- **Watch span retention.** On tenants where spans retain for only ~10 days, a
+  decoded conversation/task id that returns empty is almost always an *old*
+  conversation past retention, not a codec bug — verify the codec against a
+  conversation from the last few days (e.g. one from
+  `summarize count(), by:{<app>.conversation_id}` over 7d). The bridge only
+  works for recent activity, which is the debugging case anyway.
+
+---
+
+## 2. TUI extension model — how to add a view
+
+The catalog is **declarative data**, not screens. Adding an entity/signal view
+is a `catalog.Spec` literal; the generic `tableView` engine renders it.
+
+```go
+var myViewSpec = &Spec{
+    Name, Aliases, Kind,       // KindEntity | KindSignal
+    Desc,
+    Query   func(Scope) string // scope-aware DQL; compose s.Entity/s.Arg/s.TraceID
+    Columns  []Column          // Field or Value; Width (0=flex); Right; Class; Sort
+    Entity   func(rec) *Entity // the entity a row stands for (scope for drills)
+    Drills   map[string]string // 'l'→logs, 's'→traces, 'm'→metrics, …
+    EntityScoped bool          // entity view whose Query composes s.Entity
+    EnterTarget  string        // k9s containment: enter → child view (detail moves to 'd')
+    EnterArg     func(rec) string // census row → typed browser via Scope.Arg
+    Trace        func(rec) string // row's trace id (log→trace, trace→waterfall)
+    Enrich   *EnrichSpec       // batched sparkline columns
+}
+```
+
+Key design points learned:
+
+- **`Scope` carries everything a query composes**: `Entity`, `Timeframe`,
+  `Arg` (generic-browser node type), `TraceID`. Keep it small; add a field
+  rather than smuggling state through globals.
+- **`Spec.UsesScope()`** (`Kind==Signal || EntityScoped`) decides whether the
+  pin (`.`) and the scope crumb apply — a view that ignores scope must not
+  *claim* it in the breadcrumb.
+- **`EnrichSpec`** = one batched `timeseries ... by:{…}, filter: in(…)` per
+  refresh. `Key(rec)` is the row's join value, `By` the result field carrying
+  it; results land under `EnrichKey(alias)` and render via `SparkColumn`.
+  Failures degrade to blank cells by design — never surface an enrichment error.
+- **Curated where curation adds value, introspection everywhere else.** The
+  generic `resources` view browses *any* Smartscape type from the census; only
+  pods/hosts/services/etc. get bespoke columns.
+- **Two special `Drills` targets** beyond view names: `"metrics"` (canned
+  charts) and `"trace"`/`"trace-logs"` (waterfall / trace-scoped logs).
+  `EnterTarget: "waterfall"` is the sentinel for the bespoke waterfall screen.
+
+### Bespoke screens (not table-driven)
+
+`home`, `query` (DQL escape hatch), `nav` (smartscape navigator — overview /
+type browser / walk, see ../design/smartscape-navigator.md), `waterfall`,
+`relations`, `detail`, `inspector`, `metrics` each implement the `viewModel`
+interface directly.
+Optional capability interfaces let the app treat them uniformly:
+`selectionProvider` (pin/relations/yank/open), `dqlProvider` (ctrl+q reveal),
+`traceProvider` (waterfall's trace id).
+
+---
+
+## 3. bubbletea message-flow patterns
+
+- **Views mutate in place (pointer receivers) and stay alive when covered**, so
+  `esc` restores them with data + cursor intact. The breadcrumb stack owns the
+  lifetimes.
+- **Stale results are dropped by `(owner, seq)`, never by cancellation.** The
+  DQL executor prints cancellation notices to stderr, which would tear the
+  alternate screen — so in-flight queries run to completion and old results are
+  discarded on arrival. Every async query is a `tea.Cmd` goroutine.
+- **Distinct owners disambiguate multiplexed queries on one view's seq:**
+  `enrichOwner{v}`, `nameOwner{v}`, `panelOwner{v, idx}`. A view's list query,
+  its enrichment query, and (home) its per-panel queries all share the view's
+  `seq` generation but route by owner type.
+- **`dataMsg` is broadcast to every view on both the live and `prev` stacks
+  (deduped)** so a parent still loading below a drill-down completes, and detail
+  pages forward results to their lazily-started tabs. Views drop results they
+  don't own.
+- **Every view that fires its own queries needs a `seq` generation guard** —
+  `tableView`, `waterfall`, `relations`, `inspector`, `metrics`, *and* `home`
+  (its per-panel results). A slow result from a superseded refresh (e.g. after
+  a timeframe change) must be dropped, or it overwrites fresher data. This is
+  the one an early `home` implementation missed.
+
+### A view must never claim a scope it didn't apply
+
+The subtlest class of bug the review found. A global pin (`.`) is handed to the
+next command-bar/hotkey jump — but only if that view's query can actually
+compose the pinned entity. Two ways the naïve `if UsesScope() { scope.Entity =
+pin }` lies:
+
+1. The query **ignores** the entity for that type (a `SERVICE` pin on `:pods` —
+   `k8sScopeFilter` returns `""`; a K8s pin on `:vulnerabilities` —
+   `VulnEntityFilter` returns `""` because K8s ids don't match the
+   `related_entities` id era). The list is unfiltered but the breadcrumb reads
+   `pods (checkout)`: data presented as scoped that never was.
+2. The query **composes a filter that matches nothing** — a filter on a field
+   the record type doesn't carry. Silently empty but labelled as scoped, so the
+   user concludes there's no data. (The original example here was a `HOST` pin
+   on `:traces`; note that no longer holds universally — on OneAgent fullstack
+   tenants spans **do** carry `dt.smartscape.host`, see §1.3 — so pick a field
+   the target record type genuinely lacks when reasoning about this case.)
+
+The fix is `Spec.CanScope(tf, e)`, honest **by construction**: if
+`Query(scoped) == Query(unscoped)` the entity had no effect → don't apply or
+claim it (catches case 1 and any future scope-ignoring view for free); an
+optional `Scopable(e)` predicate refines case 2 (traces → `SpanScopable`). When
+a pin doesn't apply, navigate **unscoped** and say so in the status line rather
+than refuse — `:pods` should always give you pods. Drill-down navigation is
+type-correct by construction (workload→pods, etc.); only the pin injects
+arbitrary types, so it is the only path that needs the guard.
+
+**General principle:** a breadcrumb/header that shows scope is a *promise the
+query kept*. Derive the label from what the query actually did, never from what
+the user intended.
+
+- **`claimKey`** (a no-op `tea.Cmd` returning `nil`) lets a child consume a key
+  the app would otherwise act on — e.g. `esc` that clears a filter instead of
+  popping the stack. bubbletea discards `nil` messages, so returning a real
+  no-op command is how you say "handled, do nothing."
+- **`InputActive()` gating**: while a text input (filter, command bar, query
+  editor) owns the keyboard, global single-letter keys (`q`, `x`, `.`, hotkeys)
+  must not fire. Every view reports this; the app checks it before its own
+  key switch.
+
+---
+
+## 3b. Visual design (theme package)
+
+- **The palette is adaptive with explicit fallbacks.** Every color in
+  `internal/tui/theme` is a `lipgloss.CompleteAdaptiveColor`: truecolor hex
+  (Catppuccin Mocha/Latte) plus hand-picked ANSI-256 and ANSI-16 fallbacks per
+  background flavor. lipgloss picks the variant for the terminal's capability
+  and background — never rely on automatic downsampling for the 16-color tier,
+  it picks ugly approximations.
+- **Selection is a gutter bar + background wash, not `Reverse(true)`.**
+  Reverse video inverts whatever colors a cell already has (unreadable over
+  class-colored cells); a fixed `SelBg` + dropping per-cell colors on the
+  selected row reads as one calm bar. All list views share the pattern:
+  `theme.Gutter.Render("▌") + theme.Selected.Render(pad(row, width-1))` — and
+  every row budget must account for that 1-cell gutter (the waterfall's column
+  math missed it first: rows overflowed and truncated their last column).
+- **One global spinner, app-driven.** Views expose `Busy() bool` (optional
+  `busyReporter` interface); the app runs a single 90ms `tea.Tick` loop while
+  the *visible* view is busy and advances a frame counter in `theme`. Views
+  just render `theme.Spin()` — no per-view spinner models. The test helper
+  `deliver` must drop `spinnerTickMsg` (like `dataMsg`) or a busy view re-arms
+  the tick forever and the test hangs.
+- **lipgloss has no border titles** — the home panels hand-roll their boxes
+  (`╭─ ● title ─…─╮` + `│` sides) precisely so the title can live in the top
+  border. `lipgloss.Width` (ANSI-aware) does the fill math on styled titles.
+- **Overlays replace the body, they don't composite.** lipgloss v1 can't
+  layer; the command palette / help / timeframe picker render *instead of* the
+  body via `lipgloss.Place`. Design overlays to be self-sufficient, not
+  peek-through.
+- Styled-string layout: `pad`/`cell` (lipgloss.Width) and `ansi.Truncate` are
+  safe on already-styled strings; plain `fmt.Sprintf("%-20s", styled)` is not
+  (counts escape bytes).
+- **`wrap()` (lipgloss `Width(w).Render`) pads every line to the full width**
+  with trailing spaces. Any "does this value fit inline?" check against
+  wrapped output always fails — strip the padding first (`wrapLines` in
+  render.go trims each line). This silently pushed every short string value
+  into the two-line block layout before it was caught on a live drive.
+
+## 3c. Typed values & inspector navigation (render.go / inspector.go)
+
+- **`renderValue` classifies record values for display**: entity ids (both
+  eras match `^[A-Z][A-Z0-9_]*-[0-9A-F]{16}$`, type = the prefix) become
+  accent links; RFC3339 strings render absolute + "· 23m ago"; `*duration*`
+  keys holding digit strings render `FormatNs` + raw ns; numeric strings get
+  thousands separators — **except identifier-ish keys** (`isIDKey`:
+  `aws.account.id` is a label, not a quantity); 16/32-hex are opaque uids;
+  maps/arrays and strings that parse as JSON render as an indented
+  syntax-highlighted block (keys sky, strings green, numbers peach). The raw
+  value is kept beside the styled lines for yank.
+- **Density first: scalars and arrays are one line by default.** Values too
+  big for their line collapse to a truncated compact preview (`compact`:
+  whitespace-squashed string / one-line JSON) marked with a dim `▸`; enter
+  expands to the full block (`▾`). **JSON objects are the exception** — they
+  read as structure, so they default to the expanded block (enter collapses).
+  The earlier layout (label line + indented block for anything long) read
+  nicely but wasted half the screen — user feedback killed it within an hour
+  of a live drive.
+- **The inspector has a field cursor, not a line scroller**: j/k moves over
+  fields, the viewport follows, and the selected row's label line gets the
+  gutter-bar + wash treatment (per-value colors drop on that line — strip
+  ANSI before washing). enter follows the selection: entity id → its detail
+  page, `trace*` 32-hex → the waterfall, expandable → toggle. Arrays whose
+  elements are all entity ids (`affected_entity_ids`) explode into one
+  navigable `key[i]` row each.
+- **Selection follows the cursor**: `Selection()` returns the highlighted
+  link's entity (falling back to the page entity), so pin/relations/open act
+  on what the user is looking at. `y` goes through the `yankProvider`
+  interface (app checks it before the entity-id fallback) and copies the
+  selected field's raw value. The record's own `id` field is styled opaque,
+  not as a link — a self-link is noise (but `id_classic` may be a *different*
+  entity and stays navigable).
+- **Id-only traversal must back-fill the name.** An entity link carries no
+  name; the detail page's tabs share a pointer to the page entity
+  (`scope.Entity = &v.entity`), and when the details-tab fetch returns,
+  `detailView` copies the learned name in. Unstarted signal tabs then compose
+  it — load-bearing for K8s entities, whose log scoping matches plain
+  `k8s.*` names (§1.3). Without this, logs on a traversed pod are silently
+  empty.
+
+## 3d. Metrics charts (btop-style)
+
+- Filled braille areas (`PlotFilled`), not line plots; per-row **vertical
+  gradient** via `theme.Gradient` — top row full series color, lower rows
+  blend toward the background ink. Only the truecolor tier fades; 256/16
+  fallbacks keep the flat base color (downsampled blends look muddy).
+- **Scaling is honest**: zero baseline for filled charts (min-based
+  autoscale exaggerates noise into drama), and `%` metrics render as a true
+  0–100 gauge — a host at 3% CPU *should* look nearly empty; the header
+  carries the numbers (`last` value prominent, min/avg/max dim).
+- Charts divide the body height (`(h - 2 - 2n) / n` rows each, clamped 2–9),
+  y-axis max/min labels sit on the first/last braille row (`┤` ticks), and a
+  single shared time axis (`└ 2h ago … now`) closes the page — every chart
+  spans the same window, so per-chart axes would be noise.
+- Unit-aware formatting: `"B"` → IEC bytes (a 15.3 GiB axis label, not
+  "16106.1M"), `%`/`ms` attach suffixes. Shared as `catalog.FormatUnit`
+  (charts, vitals rows) and `catalog.FormatUnitShort` (dense table cells:
+  one-decimal percent, spaceless bytes, k8s `500m` millicores).
+- **A sparkline alone misleads**: `MiniGraph` normalizes to its own range,
+  so a flat 3% and a flat 90% CPU render identically. Every spark column
+  pairs the mini-graph with the right-aligned latest value, and the vitals
+  block adds a btop-style meter for `%` series — `█…░` scaled 0–100 and
+  class-colored by load (ok < 75 ≤ warn < 90 ≤ error) — because percent has
+  an absolute scale the trend can't show.
+
+---
+
+## 4. Server-side scope beats client-side filter for capped lists
+
+A subtle correctness bug: jumping to a limit-capped list (e.g. pods, 800 cap)
+and applying a **client-side** `/`-filter can miss a row that fell outside the
+fetched page. When you know the exact target (a pod name from a home-panel
+warning), push it into the **query** as `Scope.Entity` so the server narrows,
+not the client. See the home "kubernetes warnings" panel action and
+`k8sScopeFilter` for `K8S_POD`.
+
+Corollary: the k8s-warnings panel looks back 24h, so its jump must widen the
+timeframe to 24h too — otherwise a pod that died hours ago is gone from a 2h
+window.
+
+---
+
+## 5. Verifying the TUI live
+
+The TUI refuses to start in an auto-detected agent environment and captured
+panes strip ANSI — so drive it in tmux:
+
+```bash
+tmux new-session -d -s t -x 150 -y 40 \
+  "$BIN tui --no-agent 2>err.log; sleep 60"
+tmux send-keys -t t 4        # one keypress per call — batching coalesces into one KeyMsg
+tmux capture-pane -t t -p    # -e to see the reverse-video selected row
+```
+
+- **`--no-agent`** is mandatory from a Claude/agent session (agent env vars
+  propagate into tmux).
+- **One `send-keys` per keypress.** Multiple keys in one call can merge into a
+  single bubbletea `KeyMsg` ("jjjjj") that matches nothing.
+- Stress tiny terminals (`-x 60 -y 12`) — layout math must not underflow
+  (`strings.Repeat` with negative counts panics; clamp bar/column widths).
+- A rich demo tenant with a K8s cluster, AWS inventory, Postgres, GenAI, RUM,
+  and live problems/vulns exercises every view in one place.
+
+### Testing without a TTY
+
+bubbletea models are pure (`Update(msg) → cmd`): drive with synthetic messages,
+chase returned navigation `tea.Cmd`s back into the app, and seed rows via the
+`dataSource.runFn` seam (never hit HTTP). Assert on navigation, scope
+composition, and DQL strings. Catalog `Query` templates are golden-tested
+against fixture scopes — cheap regression protection for scope composition.
+
+---
+
+## 6. Live-exploration workflow (how the DQL above was validated)
+
+The DQL facts in §1 came from a fan-out of read-only probe agents, one per
+domain (K8s entities, K8s metrics, traces, AWS, edges, enrichment, breadth),
+each running `dtctl query '…' -o json` against the tenant with a strict schema
+for validated-query / fields / gotchas output. Rules that made it reliable:
+
+- Always small limits and a 2h window; widen only when empty.
+- Treat empty results as suspicious (silent-empty trap) — verify non-empty
+  before declaring a field name "validated."
+- Report **exact copy-paste DQL**, field names with one example value each, and
+  every gotcha hit. The gotchas were worth more than the happy-path queries.
+
+This front-loaded exploration is why nearly every query worked on first live
+drive — the traps were already known before a line of view code was written.
+
+## 7. security.events (validated live, demo tenant)
+
+The facts behind the security workspace (`catalog/security.go`):
+
+- **Two report levels, two jobs.** `VULNERABILITY_STATE_REPORT_EVENT`
+  records exist at `event.level == "VULNERABILITY"` (the rollup: full
+  markdown description, complete `davis_assessment.*`, remediation,
+  references — but **counts only**, no entity ids) and `"ENTITY"` (one row
+  per affected entity: `affected_entity.*`, the vulnerable component,
+  process-instance ids, `related_entities.*.{ids,names}`, and — for CODE
+  vulns — `entry_points.entry_point_jsons`). Any rollup query MUST filter
+  the level: summarizing both levels into one `by:{vulnerability.id}`
+  bucket lets `takeLast` pick fields from either row shape.
+- **Array membership pins**: `in("SERVICE-…", related_entities.services.ids)`
+  works with plain strings (legacy-era ids — no `toSmartscapeId`).
+  SERVICE and HOST ids are identical strings across both ID eras;
+  `PROCESS-<hex>` ↔ `PROCESS_GROUP_INSTANCE-<hex>` share the hex suffix
+  (checked across every distinct PGI in 7d of attack records), so a
+  modern PROCESS pin swaps the prefix. K8s workload/cluster ids in
+  `related_entities` do NOT match Smartscape ids (`CLOUD_APPLICATION-…` /
+  legacy `KUBERNETES_CLUSTER-…`) — K8s pins refuse honestly.
+- **Attacks carry no `vulnerability.id`.** RAP `DETECTION_FINDING` records
+  link to code-level vulns only via `vulnerability.code_location.name`
+  (exact string match). *(Not reproducible on OneAgent/OTel-demo tenants:* their
+  `DETECTION_FINDING` records are web-attack / simulated-cloud findings with
+  `vulnerability.code_location.name` null throughout — the code-location
+  linkage only shows up for code-level RAP attacks, which neither tenant had.)
+  For library vulns the only linkage is
+  entity-based (detections on the affected process groups) — the page's
+  attacks tab labels nothing causal and `filter false` keeps it honestly
+  empty when the hop resolves no matchable entities (an unfiltered fetch
+  would present the tenant's whole attack stream as "this vuln's
+  attacks"). `filter false` is legal DQL (constant-filter warning, empty
+  result).
+- **Attack records are fat and well-stamped**: `finding.*`
+  (type/severity/action Blocked|Audited), `entry_point.payload` +
+  `url.path` + `function.name` + structured `user_controlled_inputs`
+  (with `is_malicious` spans), `actor.ips`, full `http.request.header.*`,
+  `trace.id`/`span.id`, `dt.smartscape_source.id` (=`PROCESS-…`), both-era
+  process/host ids, and `dt.entity.process_group` — which is why
+  `legacyField` grew a PROCESS_GROUP arm.
+- **`expand entry_points.entry_point_jsons` works** (one row per entry
+  point; each element is a JSON *string* — parse client-side, tolerant of
+  malformed docs). Payload user-input values arrive masked (`*****`).
+- **State reports are periodic snapshots** (24h floor still right); a
+  resolved vuln stops being re-reported, so the page's detail fetch looks
+  back 7d. Change events (`VULNERABILITY_STATUS_CHANGE_EVENT` /
+  `…ASSESSMENT_CHANGE_EVENT`) are sparse — the timeline floors at 30d.
+- **glamour in bubbletea**: don't use `glamour.WithAutoStyle()` — it
+  issues a fresh OSC background query mid-session (bubbletea eats the
+  reply; ~100ms stall + stray input risk). Pick
+  `WithStandardStyle("dark"/"light")` from `lipgloss.HasDarkBackground()`,
+  whose verdict is already cached from the first styled frame.

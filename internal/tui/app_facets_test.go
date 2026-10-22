@@ -1,0 +1,662 @@
+package tui
+
+import (
+	"fmt"
+	"slices"
+	"strings"
+	"testing"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
+
+	"github.com/dynatrace-oss/dtui/internal/tui/catalog"
+)
+
+// Facets & server search: '/' + enter promotes the client filter to a
+// server-side | search stage; 'f' builds attribute=value filters from
+// fieldsSummary suggestions; 'F' (and the esc chain) clears.
+
+// The search stage must inject directly after the source command — on an
+// aggregating pipeline (pods: parse | expand | summarize) DQL rejects it
+// anywhere later (SEARCH_COMMAND_NOT_ALLOWED_AFTER, found on a live drive).
+func TestServerSearchPrecedesTransformingCommands(t *testing.T) {
+	a := testApp(t, "pods")
+	seedRows(t, a, []map[string]any{{"id": "K8S_POD-1", "name": "checkout-1", "namespace": "shop", "phase": "Running"}})
+	tv := a.top().(*tableView)
+
+	press(a, key("/"))
+	typeText(a, "pool")
+	press(a, key("enter"))
+
+	lines := strings.Split(tv.dql, "\n")
+	if len(lines) < 2 || lines[1] != `| search "*pool*"` {
+		t.Fatalf("search must follow the source line:\n%s", tv.dql)
+	}
+}
+
+func typeText(a *app, text string) {
+	for _, r := range text {
+		press(a, key(string(r)))
+	}
+}
+
+func TestFilterEnterPromotesToServerSearch(t *testing.T) {
+	a := testApp(t, "problems")
+	seedRows(t, a, []map[string]any{problemRow()})
+	tv := a.top().(*tableView)
+
+	press(a, key("/"))
+	typeText(a, "payment")
+	press(a, key("enter"))
+
+	if len(tv.searches) != 1 || tv.searches[0] != "payment" || tv.filter != "" {
+		t.Fatalf("enter should promote filter to server search: searches=%v filter=%q", tv.searches, tv.filter)
+	}
+	if !strings.Contains(tv.dql, `| search "*payment*"`) {
+		t.Errorf("dql missing search stage:\n%s", tv.dql)
+	}
+	// The stage must narrow before the cap truncates.
+	if strings.Index(tv.dql, `| search`) > strings.Index(tv.dql, `| limit`) {
+		t.Errorf("search stage must precede the limit:\n%s", tv.dql)
+	}
+	// A faceted/searched page is a place — it must be findable in history.
+	if !historyContains(a, `⌕payment`) {
+		t.Errorf("server search not recorded in history: %+v", a.hist.entries)
+	}
+
+	// F clears and refetches unnarrowed.
+	press(a, key("F"))
+	if len(tv.searches) != 0 || strings.Contains(tv.dql, "| search") {
+		t.Errorf("F should clear the server search:\n%s", tv.dql)
+	}
+}
+
+func TestEscClearsServerSearchBeforePopping(t *testing.T) {
+	a := testApp(t, "problems")
+	seedRows(t, a, []map[string]any{problemRow()})
+	tv := a.top().(*tableView)
+
+	press(a, key("/"))
+	typeText(a, "x")
+	press(a, key("enter"))
+	if len(tv.searches) != 1 || tv.searches[0] != "x" {
+		t.Fatalf("searches = %v, want [x]", tv.searches)
+	}
+
+	press(a, key("esc"))
+	if len(tv.searches) != 0 || len(a.stack) != 1 {
+		t.Fatalf("esc should clear the search, not pop: searches=%v depth=%d", tv.searches, len(a.stack))
+	}
+}
+
+// The attribute candidates are only the keys present in the fetched sample,
+// so a field that exists on the tenant but not in these rows never appears.
+// Typing such a field must offer it verbatim (tagged "typed") and let enter
+// explore its values server-side.
+func TestFacetTypedFieldEscapeHatch(t *testing.T) {
+	a := testApp(t, "hosts")
+	seedRows(t, a, []map[string]any{hostRow()})
+	tv := a.top().(*tableView)
+
+	press(a, key("f"))
+	if tv.facetMode != facetFieldStage {
+		t.Fatal("'f' should open the attribute picker")
+	}
+	const field = "zzznotasampledfield"
+	typeText(a, field)
+	if got := tv.facetFieldMatches(); len(got) != 0 {
+		t.Fatalf("field absent from the sample must match no candidate, got %v", got)
+	}
+	entries := tv.facetEntries()
+	if len(entries) != 1 || entries[0].kind != entryAttr || entries[0].attr != field {
+		t.Fatalf("escape-hatch entry missing: %+v", entries)
+	}
+	if out := ansi.Strip(tv.renderFacetPicker()); !strings.Contains(out, field) || !strings.Contains(out, "typed") {
+		t.Fatalf("typed-field entry not rendered with its tag:\n%s", out)
+	}
+	press(a, key("enter"))
+	if tv.facetMode != facetValueStage || tv.facetField != field {
+		t.Fatalf("enter should explore the typed field: mode=%d field=%q", tv.facetMode, tv.facetField)
+	}
+}
+
+func TestFacetPickerFlow(t *testing.T) {
+	a := testApp(t, "hosts")
+	seedRows(t, a, []map[string]any{hostRow()})
+	tv := a.top().(*tableView)
+
+	var summaryDQL string
+	a.ds.runFn = func(dql string) ([]map[string]any, error) {
+		summaryDQL = dql
+		return nil, nil
+	}
+
+	press(a, key("f"))
+	if tv.facetMode != facetFieldStage {
+		t.Fatal("'f' should open the attribute picker")
+	}
+	if !tv.InputActive() {
+		t.Fatal("picker must own the keyboard (InputActive)")
+	}
+	joined := strings.Join(tv.facetFields, " ")
+	if !strings.Contains(joined, "sku") || !strings.Contains(joined, "name") {
+		t.Fatalf("attribute candidates missing scalars: %v", tv.facetFields)
+	}
+	if strings.Contains(joined, "lifetime") || strings.Contains(joined, "ip") {
+		t.Fatalf("maps/arrays must not be facet candidates: %v", tv.facetFields)
+	}
+
+	// Quick-search narrows to one attribute; enter explores its values.
+	// 's'/'k' are drill/move keys — InputActive gating keeps them as text.
+	typeText(a, "sku")
+	if got := tv.facetFieldMatches(); len(got) != 1 || got[0] != "sku" {
+		t.Fatalf("attribute quick-search → %v, want [sku]", got)
+	}
+	press(a, key("enter"))
+	if tv.facetMode != facetValueStage || tv.facetField != "sku" {
+		t.Fatalf("enter should explore values: mode=%d field=%q", tv.facetMode, tv.facetField)
+	}
+	if !strings.Contains(summaryDQL, fmt.Sprintf("| fieldsSummary sku, topValues: %d", catalog.FacetTopValues)) {
+		t.Errorf("fieldsSummary query not issued:\n%s", summaryDQL)
+	}
+	if strings.Contains(summaryDQL, "| limit") {
+		t.Errorf("fieldsSummary must summarize the unlimited set:\n%s", summaryDQL)
+	}
+
+	// Server suggestions arrive; enter applies the highlighted value exactly.
+	tv.Update(dataMsg{owner: facetOwner{v: tv, field: "sku"}, seq: tv.seq, records: []map[string]any{{
+		"field":  "sku",
+		"values": []any{map[string]any{"value": "t3.large", "count": "12"}},
+	}}})
+	if len(tv.facetOptions) != 1 {
+		t.Fatalf("facetOptions = %v", tv.facetOptions)
+	}
+	press(a, key("enter"))
+	if tv.facetMode != facetOff || len(tv.facets) != 1 {
+		t.Fatalf("enter should apply the facet and close: mode=%d facets=%v", tv.facetMode, tv.facets)
+	}
+	if want := (catalog.Facet{Field: "sku", Value: "t3.large"}); tv.facets[0] != want {
+		t.Fatalf("facet = %+v, want %+v", tv.facets[0], want)
+	}
+	if !strings.Contains(tv.dql, `| filter sku == "t3.large"`) {
+		t.Errorf("dql missing facet stage:\n%s", tv.dql)
+	}
+	if !strings.Contains(tv.Crumb(), "sku=t3.large") {
+		t.Errorf("crumb must claim the applied facet, got %q", tv.Crumb())
+	}
+	if !historyContains(a, "sku=t3.large") {
+		t.Errorf("faceted view not recorded in history: %+v", a.hist.entries)
+	}
+}
+
+// injectTagCensus drives the lazy smartscape tag-census result onto a view (the
+// discovery query result deliver() drops), rebuilding the picker candidates.
+func injectTagCensus(tv *tableView, contexts map[string]any) {
+	tv.Update(dataMsg{owner: tagDiscoverOwner{v: tv}, seq: tv.seq, dql: tv.tagDiscoverKey, records: []map[string]any{contexts}})
+}
+
+// TestFacetPickerTagKeys drives the discovered smartscape-tag faceting path,
+// general across k8s labels and cloud (aws/azure/gcp) tags: the picker turns
+// each discovered tags:<context> key into a "<context>:<key>" candidate,
+// explores one server-side, and composes a pre-projection bracket-indexed
+// filter stage.
+func TestFacetPickerTagKeys(t *testing.T) {
+	a := testApp(t, "pods")
+	seedRows(t, a, []map[string]any{podRow("checkout-7d9f", "shop", "Running", 0)})
+	tv := a.top().(*tableView)
+
+	var summaryDQL string
+	a.ds.runFn = func(dql string) ([]map[string]any, error) {
+		summaryDQL = dql
+		return nil, nil
+	}
+
+	press(a, key("f"))
+	// The lazy census arrives carrying several contexts — proving the flow is
+	// generic across k8s + azure + gcp, not hardcoded to k8s.
+	injectTagCensus(tv, map[string]any{
+		"tags:k8s.labels":            map[string]any{"app.kubernetes.io/name": "checkout", "tier": "frontend"},
+		"tags:azure":                 map[string]any{"Dtp_Stage": "prod"},
+		"tags:google_compute_engine": map[string]any{"zone": "us-central1"},
+	})
+
+	for _, want := range []string{"k8s.labels:app.kubernetes.io/name", "k8s.labels:tier", "azure:Dtp_Stage", "gcp:zone"} {
+		if !slices.Contains(tv.facetFields, want) {
+			t.Fatalf("tag candidate %q missing: %v", want, tv.facetFields)
+		}
+	}
+	// Bare/raw map fields are never candidates.
+	for _, no := range []string{"tags:k8s.labels", "tags:azure", "labels", "annotations"} {
+		if slices.Contains(tv.facetFields, no) {
+			t.Fatalf("bare map field %q must not be a candidate: %v", no, tv.facetFields)
+		}
+	}
+
+	// Narrow to the label key and explore its values server-side.
+	typeText(a, "k8s.labels:app")
+	if got := tv.facetFieldMatches(); len(got) != 1 || got[0] != "k8s.labels:app.kubernetes.io/name" {
+		t.Fatalf("quick-search → %v, want [k8s.labels:app.kubernetes.io/name]", got)
+	}
+	press(a, key("enter"))
+	if tv.facetMode != facetValueStage || tv.facetField != "k8s.labels:app.kubernetes.io/name" {
+		t.Fatalf("enter should explore the tag key: mode=%d field=%q", tv.facetMode, tv.facetField)
+	}
+	if tv.facetMapField != "tags:k8s.labels" || tv.facetMapKey != "app.kubernetes.io/name" {
+		t.Fatalf("map target not resolved: field=%q key=%q", tv.facetMapField, tv.facetMapKey)
+	}
+	if !strings.Contains(summaryDQL, "| fieldsSummary `tags:k8s.labels`[`app.kubernetes.io/name`], topValues:") {
+		t.Errorf("fieldsSummary must index the map key with quoted context+key:\n%s", summaryDQL)
+	}
+
+	// A server suggestion applies as a bracket-indexed, key-quoted filter.
+	tv.Update(dataMsg{owner: facetOwner{v: tv, field: "k8s.labels:app.kubernetes.io/name"}, seq: tv.seq, records: []map[string]any{{
+		"field":  "k8s.labels:app.kubernetes.io/name",
+		"values": []any{map[string]any{"value": "checkout", "count": "3"}},
+	}}})
+	press(a, key("enter"))
+	if tv.facetMode != facetOff || len(tv.facets) != 1 {
+		t.Fatalf("enter should apply and close: mode=%d facets=%v", tv.facetMode, tv.facets)
+	}
+	if !strings.Contains(tv.dql, "| filter `tags:k8s.labels`[`app.kubernetes.io/name`] == \"checkout\"") {
+		t.Errorf("dql missing bracket-indexed facet stage:\n%s", tv.dql)
+	}
+	// The map facet must be injected BEFORE the summarize — a late filter dies
+	// FIELD_DOES_NOT_EXIST once the transform drops the tag map (validated live).
+	if fi, si := strings.Index(tv.dql, "| filter `tags:k8s.labels`"), strings.Index(tv.dql, "| summarize"); fi < 0 || si < 0 || fi > si {
+		t.Errorf("map facet must precede the summarize:\n%s", tv.dql)
+	}
+}
+
+// TestFacetPriorityAndTagTail verifies the de-noised picker order: the spec's
+// FacetPriority dimensions lead, then the alphabetical scalars, then the
+// discovered tag tail (grouped by context, k8s.labels before azure), each
+// context under its own header.
+func TestFacetPriorityAndTagTail(t *testing.T) {
+	a := testApp(t, "pods")
+	seedRows(t, a, []map[string]any{{
+		"id": "K8S_POD-x", "name": "web-1", "namespace": "shop", "phase": "Running",
+		"restarts": float64(0), "ready": "1", "total": "1",
+	}})
+	tv := a.top().(*tableView)
+	press(a, key("f"))
+	injectTagCensus(tv, map[string]any{
+		"tags:k8s.labels": map[string]any{"app.kubernetes.io/name": "web", "tier": "frontend"},
+		"tags:azure":      map[string]any{"Dtp_Stage": "prod"},
+	})
+
+	cands := tv.facetFields
+	idx := func(s string) int { return slices.Index(cands, s) }
+
+	// Priority fields present in the sample lead, in declared order.
+	if idx("namespace") < 0 || idx("phase") < 0 || idx("namespace") > idx("phase") {
+		t.Fatalf("priority fields not pinned in order: %v", cands)
+	}
+	// Priority is scalar-only: every discovered tag key sinks below every plain
+	// scalar so the curated block stays clean.
+	for _, tagKey := range []string{"k8s.labels:app.kubernetes.io/name", "k8s.labels:tier", "azure:Dtp_Stage"} {
+		if idx("name") > idx(tagKey) {
+			t.Fatalf("tag key %q must sink below plain scalars: %v", tagKey, cands)
+		}
+	}
+	// Context priority: k8s.labels before azure (tagContextPriority).
+	if idx("k8s.labels:tier") > idx("azure:Dtp_Stage") {
+		t.Fatalf("k8s.labels must precede azure in the tail: %v", cands)
+	}
+
+	// Each context gets its own header; k8s.labels precedes azure, and a plain
+	// scalar renders above both — tags never fall under a scalar block.
+	out := ansi.Strip(tv.renderFacetPicker())
+	kh, ah := strings.Index(out, "tags:k8s.labels"), strings.Index(out, "tags:azure")
+	switch {
+	case kh < 0:
+		t.Errorf("k8s.labels context header missing:\n%s", out)
+	case ah < 0:
+		t.Errorf("azure context header missing:\n%s", out)
+	case kh > ah:
+		t.Errorf("k8s.labels header must precede azure header:\n%s", out)
+	}
+}
+
+// historyContains reports whether any recorded trail mentions the marker.
+func historyContains(a *app, marker string) bool {
+	for _, e := range a.hist.entries {
+		for _, ref := range e.Stack {
+			if strings.Contains(ref.Crumb, marker) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func TestSearchTermsStackAndReplace(t *testing.T) {
+	a := testApp(t, "problems")
+	seedRows(t, a, []map[string]any{problemRow()})
+	tv := a.top().(*tableView)
+
+	press(a, key("/"))
+	typeText(a, "pay")
+	press(a, key("enter"))
+	press(a, key("/"))
+	typeText(a, "err")
+	press(a, key("enter")) // enter stacks a second term
+	if len(tv.searches) != 2 || tv.searches[0] != "pay" || tv.searches[1] != "err" {
+		t.Fatalf("searches = %v, want [pay err]", tv.searches)
+	}
+	if !strings.Contains(tv.dql, `| search "*pay*"`) || !strings.Contains(tv.dql, `| search "*err*"`) {
+		t.Errorf("dql missing chained search stages:\n%s", tv.dql)
+	}
+
+	press(a, key("/"))
+	typeText(a, "new")
+	press(a, tea.KeyMsg{Type: tea.KeyEnter, Alt: true}) // alt+enter replaces
+	if len(tv.searches) != 1 || tv.searches[0] != "new" {
+		t.Fatalf("alt+enter should replace the terms, searches = %v", tv.searches)
+	}
+}
+
+func TestFacetManagerEditAndRemove(t *testing.T) {
+	a := testApp(t, "hosts")
+	seedRows(t, a, []map[string]any{hostRow()})
+	tv := a.top().(*tableView)
+	tv.searches = []string{"web"}
+	tv.facets = []catalog.Facet{{Field: "sku", Value: "t3.large"}}
+
+	// The manager lists actives first; selection starts on the attributes.
+	press(a, key("f"))
+	entries := tv.facetEntries()
+	if entries[0].kind != entrySearch || entries[1].kind != entryFacet {
+		t.Fatalf("manager order = %+v", entries[:2])
+	}
+	if tv.facetSel != 2 {
+		t.Fatalf("selection should start on the first attribute, got %d", tv.facetSel)
+	}
+
+	// Edit the facet: ↑ to it, enter → value stage prefilled, apply replaces.
+	press(a, tea.KeyMsg{Type: tea.KeyUp})
+	press(a, key("enter"))
+	if tv.facetMode != facetValueStage || tv.facetField != "sku" || tv.facetEdit != 0 {
+		t.Fatalf("edit mode = (%d, %q, %d)", tv.facetMode, tv.facetField, tv.facetEdit)
+	}
+	if tv.facetInput.Value() != "t3.large" {
+		t.Fatalf("edit input not prefilled: %q", tv.facetInput.Value())
+	}
+	tv.facetInput.SetValue("t3.micro")
+	press(a, key("enter"))
+	if len(tv.facets) != 1 || tv.facets[0].Value != "t3.micro" {
+		t.Fatalf("edit should replace in place, facets = %v", tv.facets)
+	}
+
+	// Edit the search term the same way.
+	press(a, key("f"))
+	press(a, tea.KeyMsg{Type: tea.KeyUp})
+	press(a, tea.KeyMsg{Type: tea.KeyUp})
+	press(a, key("enter"))
+	if tv.facetMode != facetValueStage || tv.facetField != "" || tv.facetInput.Value() != "web" {
+		t.Fatalf("search edit = (%d, %q, %q)", tv.facetMode, tv.facetField, tv.facetInput.Value())
+	}
+	tv.facetInput.SetValue("db")
+	press(a, key("enter"))
+	if len(tv.searches) != 1 || tv.searches[0] != "db" {
+		t.Fatalf("search edit should replace the term, searches = %v", tv.searches)
+	}
+
+	// Remove the facet individually (ctrl+x); the search stays.
+	press(a, key("f"))
+	press(a, tea.KeyMsg{Type: tea.KeyUp}) // onto the facet
+	press(a, tea.KeyMsg{Type: tea.KeyCtrlX})
+	if len(tv.facets) != 0 || len(tv.searches) != 1 {
+		t.Fatalf("ctrl+x should remove only the facet: facets=%v searches=%v", tv.facets, tv.searches)
+	}
+	if tv.facetMode != facetFieldStage {
+		t.Fatal("removal should keep the manager open")
+	}
+}
+
+func TestInspectorFacetsListBeneath(t *testing.T) {
+	a := testApp(t, "hosts")
+	seedRows(t, a, []map[string]any{hostRow()})
+	tv := a.top().(*tableView)
+
+	press(a, key("d")) // record inspector for the selected host
+	insp, ok := a.top().(*inspectorView)
+	if !ok {
+		t.Fatalf("top = %T, want inspector", a.top())
+	}
+	// Move the cursor onto the sku field and facet by it.
+	for i, row := range insp.rows {
+		if row.key == "sku" {
+			insp.cursor = i
+			break
+		}
+	}
+	press(a, key("f"))
+	if len(a.stack) != 1 || a.top() != viewModel(tv) {
+		t.Fatalf("'f' should pop back to the list, depth=%d", len(a.stack))
+	}
+	if len(tv.facets) != 1 || tv.facets[0] != (catalog.Facet{Field: "sku", Value: "t3.large"}) {
+		t.Fatalf("facets = %v", tv.facets)
+	}
+	if !strings.Contains(tv.dql, `| filter sku == "t3.large"`) {
+		t.Errorf("list not refetched with the facet:\n%s", tv.dql)
+	}
+}
+
+func TestDetailPageFacetsListBeneath(t *testing.T) {
+	a := testApp(t, "hosts")
+	seedRows(t, a, []map[string]any{hostRow()})
+	tv := a.top().(*tableView)
+
+	press(a, key("enter")) // tabbed detail page, details tab = entity inspector
+	dv, ok := a.top().(*detailView)
+	if !ok {
+		t.Fatalf("top = %T, want detail page", a.top())
+	}
+	insp := dv.tabs[0].view.(*inspectorView)
+	for i, row := range insp.rows {
+		if row.key == "sku" {
+			insp.cursor = i
+			break
+		}
+	}
+	press(a, key("f"))
+	if len(a.stack) != 1 || a.top() != viewModel(tv) {
+		t.Fatalf("'f' on the details tab should facet the list beneath, depth=%d", len(a.stack))
+	}
+	if len(tv.facets) != 1 || tv.facets[0] != (catalog.Facet{Field: "sku", Value: "t3.large"}) {
+		t.Fatalf("facets = %v", tv.facets)
+	}
+}
+
+func TestInspectorFacetGuardsMissingField(t *testing.T) {
+	a := testApp(t, "hosts")
+	seedRows(t, a, []map[string]any{hostRow()})
+	tv := a.top().(*tableView)
+
+	// An inspector over a record with a field the list's rows don't carry
+	// (e.g. reached via a fresh detail fetch) must not silently empty it.
+	deliver(a, a.dispatch(inspectMsg{title: "x", rec: map[string]any{"exotic.field": "v"}}))
+	insp := a.top().(*inspectorView)
+	for i, row := range insp.rows {
+		if row.key == "exotic.field" {
+			insp.cursor = i
+			break
+		}
+	}
+	press(a, key("f"))
+	if len(tv.facets) != 0 {
+		t.Fatalf("facet on a missing field must be refused, got %v", tv.facets)
+	}
+	if len(a.stack) != 2 {
+		t.Fatalf("refused facet must not pop the inspector, depth=%d", len(a.stack))
+	}
+	if !a.statusErr || !strings.Contains(a.status, "exotic.field") {
+		t.Errorf("status should name the missing field: %q", a.status)
+	}
+}
+
+func TestInspectorFacetOnArrayElement(t *testing.T) {
+	a := testApp(t, "problems")
+	rec := problemRow()
+	rec["affected_entity_ids"] = []any{"CLOUD_APPLICATION-0000000000000001"}
+	seedRows(t, a, []map[string]any{rec})
+	tv := a.top().(*tableView)
+
+	press(a, key("d")) // raw record inspector (enter = problem page)
+	insp := a.top().(*inspectorView)
+	for i, row := range insp.rows {
+		if row.key == "affected_entity_ids" {
+			insp.cursor = i
+			break
+		}
+	}
+	press(a, key("f"))
+	want := catalog.Facet{Field: "affected_entity_ids", Value: "*CLOUD_APPLICATION-0000000000000001*"}
+	if len(tv.facets) != 1 || tv.facets[0] != want {
+		t.Fatalf("array-element facet = %v, want %+v", tv.facets, want)
+	}
+	if !strings.Contains(tv.dql, `matchesValue(affected_entity_ids, "*CLOUD_APPLICATION-0000000000000001*")`) {
+		t.Errorf("array facet must go through element-wise matchesValue:\n%s", tv.dql)
+	}
+}
+
+func TestFacetPatternValue(t *testing.T) {
+	a := testApp(t, "hosts")
+	seedRows(t, a, []map[string]any{hostRow()})
+	tv := a.top().(*tableView)
+
+	press(a, key("f"))
+	typeText(a, "name")
+	press(a, key("enter")) // explore values for "name"
+	if tv.facetField != "name" {
+		t.Fatalf("facetField = %q, want name", tv.facetField)
+	}
+
+	// A typed '*' pattern wins over suggestions.
+	typeText(a, "web-*")
+	press(a, key("enter"))
+	if len(tv.facets) != 1 || tv.facets[0].Value != "web-*" {
+		t.Fatalf("facets = %v", tv.facets)
+	}
+	if !strings.Contains(tv.dql, `| filter matchesValue(name, "web-*")`) {
+		t.Errorf("dql missing pattern stage:\n%s", tv.dql)
+	}
+}
+
+func TestFacetEscStagesBack(t *testing.T) {
+	a := testApp(t, "hosts")
+	seedRows(t, a, []map[string]any{hostRow()})
+	tv := a.top().(*tableView)
+
+	press(a, key("f"))
+	press(a, key("enter")) // into value stage for the first attribute
+	if tv.facetMode != facetValueStage {
+		t.Fatalf("mode = %d, want value stage", tv.facetMode)
+	}
+	press(a, key("esc")) // back to attributes, not out
+	if tv.facetMode != facetFieldStage || len(a.stack) != 1 {
+		t.Fatalf("esc should step back to attributes: mode=%d depth=%d", tv.facetMode, len(a.stack))
+	}
+	press(a, key("esc")) // out of the picker, view stays
+	if tv.facetMode != facetOff || len(a.stack) != 1 {
+		t.Fatalf("esc should close the picker: mode=%d depth=%d", tv.facetMode, len(a.stack))
+	}
+}
+
+func TestFacetsSurviveTimeframeChange(t *testing.T) {
+	a := testApp(t, "problems")
+	seedRows(t, a, []map[string]any{problemRow()})
+	tv := a.top().(*tableView)
+	tv.facets = []catalog.Facet{{Field: "event.status", Value: "ACTIVE"}}
+	tv.searches = []string{"payment"}
+
+	deliver(a, a.setTimeframe(catalog.Timeframes[3]))
+	if !strings.Contains(tv.dql, `| search "*payment*"`) ||
+		!strings.Contains(tv.dql, `| filter event.status == "ACTIVE"`) {
+		t.Errorf("facets/search must survive a timeframe refetch:\n%s", tv.dql)
+	}
+	if !strings.Contains(tv.dql, "7d") {
+		t.Errorf("timeframe not applied:\n%s", tv.dql)
+	}
+}
+
+func TestStaleFieldsSummaryResultDropped(t *testing.T) {
+	a := testApp(t, "hosts")
+	seedRows(t, a, []map[string]any{hostRow()})
+	tv := a.top().(*tableView)
+
+	press(a, key("f"))
+	typeText(a, "sku")
+	press(a, key("enter"))
+
+	// A result for a different exploration (superseded field) must not land.
+	tv.Update(dataMsg{owner: facetOwner{v: tv, field: "name"}, seq: tv.seq, records: []map[string]any{{
+		"field":  "name",
+		"values": []any{map[string]any{"value": "web-01", "count": "1"}},
+	}}})
+	if len(tv.facetOptions) != 0 || !tv.facetLoading {
+		t.Fatalf("stale facet result must be dropped: options=%v", tv.facetOptions)
+	}
+}
+
+// Buckets are physical data separation — the primary Grail narrowing axis —
+// so bucket-backed views project dt.system.bucket into every record (the
+// inspector shows it, cross-view 'f' can pass it) and the facet manager pins
+// it first, ahead of the record attributes.
+func TestBucketFacetFirstClassOnBucketBackedViews(t *testing.T) {
+	a := testApp(t, "logs")
+	seedRows(t, a, []map[string]any{{
+		"timestamp": "2026-07-12T10:00:00Z", "content": "boom",
+		"loglevel": "ERROR", "dt.system.bucket": "default_logs",
+	}})
+	tv := a.top().(*tableView)
+
+	if !strings.Contains(tv.dql, "| fieldsAdd dt.system.bucket") {
+		t.Fatalf("bucket projection missing from the logs query:\n%s", tv.dql)
+	}
+	press(a, key("f"))
+	if len(tv.facetFields) == 0 || tv.facetFields[0] != catalog.BucketField {
+		t.Fatalf("bucket field must lead the candidates: %v", tv.facetFields)
+	}
+	for _, f := range tv.facetFields[1:] {
+		if f == catalog.BucketField {
+			t.Fatalf("bucket field pinned and listed: %v", tv.facetFields)
+		}
+	}
+}
+
+// Entity views read no bucket-backed table — referencing dt.system.bucket
+// there would fail the whole query (FIELD_DOES_NOT_EXIST, validated live).
+func TestBucketFacetAbsentOnEntityViews(t *testing.T) {
+	a := testApp(t, "hosts")
+	seedRows(t, a, []map[string]any{hostRow()})
+	tv := a.top().(*tableView)
+
+	if strings.Contains(tv.dql, "dt.system.bucket") {
+		t.Fatalf("entity views must not reference buckets:\n%s", tv.dql)
+	}
+	press(a, key("f"))
+	for _, f := range tv.facetFields {
+		if f == catalog.BucketField {
+			t.Fatalf("bucket field offered on a bucket-less view: %v", tv.facetFields)
+		}
+	}
+}
+
+// A bucket facet must prune at the source — on a real table it becomes the
+// fetch command's bucket: parameter, Grail's native physical pruning — not
+// sit at the tail like attribute facets.
+func TestBucketFacetFiltersAtSource(t *testing.T) {
+	a := testApp(t, "logs")
+	seedRows(t, a, []map[string]any{{"content": "x", "dt.system.bucket": "default_logs"}})
+	tv := a.top().(*tableView)
+
+	deliver(a, tv.addFacet(catalog.Facet{Field: catalog.BucketField, Value: "default_logs"}))
+	lines := strings.Split(tv.dql, "\n")
+	if len(lines) < 1 || !strings.HasSuffix(lines[0], `, bucket:{"default_logs"}`) {
+		t.Fatalf("bucket facet must become the fetch bucket: parameter:\n%s", tv.dql)
+	}
+	if !historyContains(a, "dt.system.bucket=default_logs") {
+		t.Errorf("bucket facet not recorded in history: %+v", a.hist.entries)
+	}
+}

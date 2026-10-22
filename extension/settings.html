@@ -1,0 +1,196 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>dtui settings</title>
+    <style>
+      :root {
+        --bg: #13151c;
+        --panel: #1a1d26;
+        --panel-2: #20232e;
+        --line: #2b2f3b;
+        --line-2: #363c4a;
+        --fg: #e6e9f0;
+        --muted: #9aa3b5;
+        --lime: #b0d903;
+        --cyan: #06afaa;
+        --purple: #6f2ca8;
+        --danger: #e06c75;
+        --ok: #98c379;
+      }
+      * { box-sizing: border-box; }
+      body {
+        font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+        background: var(--bg); color: var(--fg);
+        margin: 0; padding: 0 20px 80px;
+        line-height: 1.5;
+      }
+      .wrap { max-width: 760px; margin: 0 auto; }
+      header { display: flex; align-items: center; gap: 14px; padding: 28px 0 8px; }
+      header h1 { font-size: 20px; margin: 0; font-weight: 650; letter-spacing: 0.2px; }
+      header .sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
+      header svg { flex: 0 0 auto; }
+
+      section { margin-top: 28px; }
+      .sec-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px; }
+      .sec-head h2 { font-size: 15px; margin: 0; font-weight: 600; }
+      .sec-head .count { color: var(--muted); font-size: 12px; }
+      .hint { color: var(--muted); font-size: 12.5px; margin: 4px 0 14px; }
+      .hint code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px;
+        font-size: 12px; color: #cdd6f4; }
+      a { color: var(--cyan); }
+
+      .card {
+        background: var(--panel); border: 1px solid var(--line);
+        border-radius: 10px; padding: 14px; margin-bottom: 10px;
+      }
+      .card.active { border-color: var(--lime); box-shadow: 0 0 0 1px rgba(176,217,3,0.25); }
+
+      .env-row { display: grid; grid-template-columns: auto 1fr 1fr auto; gap: 10px; align-items: center; }
+      .env-row .name { font-weight: 600; }
+      label.field { display: block; }
+      label.field .lbl { display: block; font-size: 11px; color: var(--muted);
+        margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.4px; }
+      input[type="text"], input[type="password"], input[type="url"], textarea {
+        width: 100%; background: var(--panel-2); color: var(--fg);
+        border: 1px solid var(--line-2); border-radius: 7px; padding: 8px 10px;
+        font-size: 13px; font-family: inherit;
+      }
+      input:focus, textarea:focus { outline: none; border-color: var(--cyan); }
+      textarea { font-family: ui-monospace, "JetBrains Mono", Menlo, monospace;
+        font-size: 12px; min-height: 200px; white-space: pre; overflow-wrap: normal;
+        resize: vertical; margin-top: 8px; }
+
+      button {
+        background: var(--panel-2); color: var(--fg); border: 1px solid var(--line-2);
+        border-radius: 7px; padding: 7px 13px; font-size: 13px; cursor: pointer;
+        font-family: inherit;
+      }
+      button:hover { border-color: var(--cyan); }
+      button.primary { background: var(--lime); color: #10130a; border-color: var(--lime); font-weight: 600; }
+      button.primary:hover { filter: brightness(1.08); }
+      button.ghost { background: transparent; }
+      button.icon { padding: 6px 9px; color: var(--muted); }
+      button.icon:hover { color: var(--danger); border-color: var(--danger); }
+      .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+      .spacer { flex: 1; }
+
+      .radio { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 12px; color: var(--muted); }
+      .radio input { accent-color: var(--lime); }
+
+      /* toggle switch */
+      .switch { position: relative; display: inline-block; width: 38px; height: 22px; flex: 0 0 auto; }
+      .switch input { opacity: 0; width: 0; height: 0; }
+      .switch .track { position: absolute; inset: 0; background: var(--line-2);
+        border-radius: 22px; transition: background 0.15s; }
+      .switch .track::before { content: ""; position: absolute; height: 16px; width: 16px;
+        left: 3px; top: 3px; background: #cdd6f4; border-radius: 50%; transition: transform 0.15s; }
+      .switch input:checked + .track { background: var(--cyan); }
+      .switch input:checked + .track::before { transform: translateX(16px); }
+
+      .set-head { display: flex; align-items: center; gap: 12px; }
+      .set-head .title { font-weight: 600; }
+      .set-head .meta { color: var(--muted); font-size: 12px; }
+      .set-desc { color: var(--muted); font-size: 12.5px; margin: 6px 0 0 50px; }
+      details { margin-top: 10px; }
+      details summary { cursor: pointer; color: var(--cyan); font-size: 12.5px; list-style: none; }
+      details summary::-webkit-details-marker { display: none; }
+      details summary::before { content: "▸ "; }
+      details[open] summary::before { content: "▾ "; }
+
+      .status { font-size: 12.5px; margin-left: 8px; }
+      .status.ok { color: var(--ok); }
+      .status.err { color: var(--danger); white-space: pre-wrap; }
+      .empty { color: var(--muted); font-size: 13px; font-style: italic; padding: 8px 0; }
+      hr { border: none; border-top: 1px solid var(--line); margin: 30px 0; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <svg viewBox="0 0 128 128" width="40" height="40" aria-hidden="true">
+          <rect x="0" y="0" width="128" height="128" rx="26" fill="#13151C"/>
+          <rect x="0.75" y="0.75" width="126.5" height="126.5" rx="25.25" fill="none"
+                stroke="#ffffff" stroke-opacity="0.08" stroke-width="1.5"/>
+          <g fill="#B0D903"><rect x="9" y="47" width="17" height="17"/><rect x="26" y="47" width="17" height="17"/><rect x="9" y="64" width="17" height="17"/></g>
+          <g fill="#06AFAA"><rect x="64" y="47" width="17" height="17"/><rect x="47" y="64" width="17" height="17"/></g>
+          <g fill="#6F2CA8"><rect x="102" y="47" width="17" height="17"/><rect x="85" y="64" width="17" height="17"/><rect x="102" y="64" width="17" height="17"/></g>
+        </svg>
+        <div>
+          <h1>dtui settings</h1>
+          <div class="sub">Environments &amp; deep-link rule sets</div>
+        </div>
+      </header>
+
+      <!-- ─── Environments ─────────────────────────────────────────────── -->
+      <section>
+        <div class="sec-head">
+          <h2>Environments</h2>
+          <span class="count" id="env-count"></span>
+        </div>
+        <div class="hint">
+          Each environment is a Dynatrace tenant URL plus a read-only platform
+          token (<code>storage:*:read</code> scopes). The <strong>active</strong>
+          one is what the side panel connects to. Tokens are stored in
+          <code>chrome.storage.local</code> on this device only — dtui is
+          read-only, so no write scopes are needed.
+        </div>
+        <div id="env-list"></div>
+        <div class="row">
+          <button id="env-add" class="ghost">+ Add environment</button>
+          <div class="spacer"></div>
+          <button id="env-save" class="primary">Save environments</button>
+          <span id="env-status" class="status" hidden></span>
+        </div>
+        <div class="hint" style="margin-top:10px">
+          Reload / reopen the side panel after switching the active environment.
+        </div>
+      </section>
+
+      <hr />
+
+      <!-- ─── Rule sets ────────────────────────────────────────────────── -->
+      <section>
+        <div class="sec-head">
+          <h2>Deep-link rule sets</h2>
+          <span class="count" id="set-count"></span>
+        </div>
+        <div class="hint">
+          A rule set is a named bundle of rules that recognize ids on a web page
+          and inject a dtui button to jump to a filtered view. Toggle a set to
+          enable/disable all its rules at once — only <strong>enabled</strong>
+          sets take effect. This extension ships with none; a customer app hosts
+          its own bundle in its repo (see <code>extension/examples/</code>). An
+          action may set a target <code>environment</code> (a tenant
+          <em>URL</em>); dtui auto-switches to whichever environment above
+          points at that host — so a shared bundle needs no agreement on local
+          names. <strong>Reload the target page after changes.</strong>
+        </div>
+        <div id="set-list"></div>
+        <div class="empty" id="set-empty" hidden>No rule sets yet — import one below.</div>
+
+        <div class="card" style="margin-top:14px">
+          <label class="field">
+            <span class="lbl">Import bundle from URL</span>
+            <div class="row">
+              <input id="import-url" type="url" placeholder="https://…/dtui-rules.json" style="flex:1" />
+              <button id="import-url-btn">Import URL</button>
+              <button id="import-file-btn">Import file…</button>
+              <button id="insert-example" class="ghost">Insert example</button>
+              <input id="import-file" type="file" accept=".json,application/json" hidden />
+            </div>
+          </label>
+          <div class="hint" style="margin-bottom:0">
+            A bundle is <code>{ "name": …, "description": …, "rules": [ … ] }</code>
+            (or a bare rules array). Importing adds it as a new enabled rule set;
+            re-importing a bundle with the same name replaces it.
+          </div>
+          <span id="import-status" class="status" hidden></span>
+        </div>
+      </section>
+    </div>
+
+    <script src="default-rules.js"></script>
+    <script src="settings.js"></script>
+  </body>
+</html>

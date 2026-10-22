@@ -1,0 +1,21 @@
+//go:build js && wasm
+
+package tea
+
+import "os"
+
+// initInput is a no-op on wasm: there is no real TTY, input is provided
+// via tea.WithInput from the xterm.js bridge.
+func (p *Program) initInput() (err error) { return nil }
+
+// openInputTTY is never reached on wasm because input is always supplied,
+// but must exist for the package to compile.
+func openInputTTY() (*os.File, error) { return nil, nil }
+
+const suspendSupported = false
+
+func suspendProcess() {}
+
+// listenForResize is a no-op on wasm; resize is injected as a
+// tea.WindowSizeMsg from the JS bridge.
+func (p *Program) listenForResize(done chan struct{}) { close(done) }

@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <!-- dtui mark: the ▛▞▟ quadrant glyphs drawn as vector rects (font-free),
+       in the three flat brand colors of the original logo — lime ▛, cyan ▞,
+       purple ▟ — on the dark app background. -->
+  <!-- rounded dark tile -->
+  <rect x="0" y="0" width="128" height="128" rx="26" fill="#13151C"/>
+  <rect x="0.75" y="0.75" width="126.5" height="126.5" rx="25.25" fill="none"
+        stroke="#ffffff" stroke-opacity="0.06" stroke-width="1.5"/>
+  <!-- glyph 1  ▛  (UL, UR, LL) — lime -->
+  <g fill="#B0D903">
+    <rect x="9" y="47" width="17" height="17"/>
+    <rect x="26" y="47" width="17" height="17"/>
+    <rect x="9" y="64" width="17" height="17"/>
+  </g>
+  <!-- glyph 2  ▞  (UR, LL) — cyan -->
+  <g fill="#06AFAA">
+    <rect x="64" y="47" width="17" height="17"/>
+    <rect x="47" y="64" width="17" height="17"/>
+  </g>
+  <!-- glyph 3  ▟  (UR, LL, LR) — purple -->
+  <g fill="#6F2CA8">
+    <rect x="102" y="47" width="17" height="17"/>
+    <rect x="85" y="64" width="17" height="17"/>
+    <rect x="102" y="64" width="17" height="17"/>
+  </g>
+</svg>

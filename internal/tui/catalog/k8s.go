@@ -1,0 +1,400 @@
+package catalog
+
+import (
+	"fmt"
+	"regexp"
+	"strings"
+	"time"
+)
+
+// Kubernetes entity views. All queries validated live against a tenant:
+// smartscapeNodes is a starting command (no fetch), k8s.object is a JSON
+// string parsed with the DPL JSON matcher, and the numbers it yields are
+// strings (toLong() where math is needed). See docs/design/tui.md.
+
+// k8sScopeFilter narrows a K8s list to the entity the user drilled in from:
+// pods of a namespace, pods on a node, pods of a workload, anything of a
+// cluster. Matching is by name fields (plain strings on the node records).
+func k8sScopeFilter(e Entity) string {
+	name := e.Name
+	switch e.Type {
+	case "K8S_POD":
+		// Server-side narrowing matters: the pod list is limit-capped, so a
+		// client-side filter could miss pods cut from the fetched page.
+		return fmt.Sprintf("k8s.pod.name == %q", name)
+	case "K8S_NAMESPACE":
+		return fmt.Sprintf("k8s.namespace.name == %q", name)
+	case "K8S_NODE":
+		return fmt.Sprintf("k8s.node.name == %q", name)
+	case "K8S_CLUSTER":
+		return fmt.Sprintf("k8s.cluster.name == %q", name)
+	case "K8S_DEPLOYMENT", "K8S_STATEFULSET", "K8S_DAEMONSET":
+		kind := strings.ToLower(strings.TrimPrefix(e.Type, "K8S_"))
+		return fmt.Sprintf("k8s.workload.kind == %q and k8s.workload.name == %q", kind, name)
+	}
+	return ""
+}
+
+var podsSpec = &Spec{
+	Name:               "pods",
+	Aliases:            []string{"po", "pod"},
+	Kind:               KindEntity,
+	EntityScoped:       true,
+	Desc:               "Kubernetes pods (ready, restarts, phase)",
+	ProjectPrimaryTags: true,
+	InjectPrimaryTags:  injectPrimaryTagsIntoSummarize,
+	FacetPriority:      []string{"namespace", "phase", "node", "workload", "kind"},
+	Query: func(s Scope) string {
+		var b strings.Builder
+		fmt.Fprintf(&b, "smartscapeNodes \"K8S_POD\", from:%s", s.Timeframe.DQL())
+		if s.Entity != nil {
+			if f := k8sScopeFilter(*s.Entity); f != "" {
+				fmt.Fprintf(&b, "\n| filter %s", f)
+			} else if j := ServiceRunsOnStage(*s.Entity); j != "" {
+				// A service's pods — where it is deployed — join through its
+				// runs_on edges (pods carry no service field).
+				b.WriteString("\n" + j)
+			}
+		}
+		b.WriteString(`
+| parse k8s.object, "JSON:obj"
+| expand cs = obj[status][containerStatuses]
+| summarize { name = takeFirst(name), phase = takeFirst(k8s.pod.phase), namespace = takeFirst(k8s.namespace.name), node = takeFirst(k8s.node.name), workload = takeFirst(k8s.workload.name), kind = takeFirst(k8s.workload.kind), ready = countIf(cs[ready] == true), total = count(), restarts = sum(toLong(cs[restartCount])), created = takeFirst(toTimestamp(obj[metadata][creationTimestamp]))` + ", `tags:k8s.labels` = takeAny(`tags:k8s.labels`)" + ` }, by:{id}
+| sort phase asc, namespace asc, name asc
+| limit 800`)
+		return b.String()
+	},
+	Columns: []Column{
+		{Title: "NAMESPACE", Field: "namespace", Width: 20},
+		{Title: "NAME", Field: "name"},
+		{Title: "READY", Width: 5, Right: true, Value: podReady, Class: classPodReady,
+			Sort: func(rec map[string]any) any { return Str(rec, "ready") }},
+		{Title: "RST", Field: "restarts", Width: 4, Right: true, Class: classNonzeroWarn},
+		{Title: "PHASE", Field: "phase", Width: 9, Class: classPodPhase},
+		SparkColumn("CPU", "cpu", 15, "mCores"),
+		{Title: "NODE", Field: "node", Width: 24},
+		{Title: "AGE", Width: 5, Right: true, Value: func(rec map[string]any) string { return Age(Str(rec, "created")) },
+			Sort: func(rec map[string]any) any { return Str(rec, "created") }},
+	},
+	Entity: func(rec map[string]any) *Entity {
+		id := Str(rec, "id")
+		if id == "" {
+			return nil
+		}
+		return &Entity{ID: id, Name: Str(rec, "name"), Type: "K8S_POD"}
+	},
+	Drills: map[string]string{"l": "logs", "s": "traces", "m": "metrics", "p": "problems", "v": "events"},
+	Enrich: &EnrichSpec{
+		Key:    func(rec map[string]any) string { return Str(rec, "name") },
+		By:     "k8s.pod.name",
+		Series: []string{"cpu"},
+		Query: func(tf Timeframe, keys []string) string {
+			return fmt.Sprintf(
+				"timeseries cpu = avg(dt.kubernetes.container.cpu_usage), by:{k8s.pod.name}, from:%s, interval: %s, filter: { in(k8s.pod.name, {%s}) }",
+				tf.DQL(), sparkInterval(tf), quoteList(keys))
+		},
+	},
+}
+
+func podReady(rec map[string]any) string {
+	ready, total := Str(rec, "ready"), Str(rec, "total")
+	if total == "" {
+		return ""
+	}
+	if ready == "" {
+		ready = "0"
+	}
+	return ready + "/" + total
+}
+
+func classPodReady(val string) string {
+	parts := strings.SplitN(val, "/", 2)
+	if len(parts) != 2 {
+		return ""
+	}
+	if parts[0] != parts[1] {
+		return "warn"
+	}
+	return "ok"
+}
+
+func classPodPhase(val string) string {
+	switch val {
+	case "Running":
+		return "ok"
+	case "Pending":
+		return "warn"
+	case "Failed":
+		return "error"
+	case "Succeeded":
+		return "dim"
+	}
+	return ""
+}
+
+// classNonzero builds a Class func that highlights non-zero counts with the
+// given severity (restarts warn, RUM session errors error) and dims zeros.
+func classNonzero(severity string) func(string) string {
+	return func(val string) string {
+		if val == "" || val == "0" {
+			return "dim"
+		}
+		return severity
+	}
+}
+
+var classNonzeroWarn = classNonzero("warn")
+
+var workloadsSpec = &Spec{
+	Name:               "workloads",
+	Aliases:            []string{"wl", "dep", "deployments"},
+	Kind:               KindEntity,
+	EntityScoped:       true,
+	Desc:               "Kubernetes workloads (deployments, statefulsets, daemonsets)",
+	ProjectPrimaryTags: true,
+	InjectPrimaryTags:  injectPrimaryTagsIntoFields,
+	FacetPriority:      []string{"namespace", "kind", "type"},
+	Query: func(s Scope) string {
+		var b strings.Builder
+		b.WriteString(`smartscapeNodes "K8S_DEPLOYMENT", "K8S_STATEFULSET", "K8S_DAEMONSET"`)
+		if s.Entity != nil {
+			if f := k8sScopeFilter(*s.Entity); f != "" {
+				fmt.Fprintf(&b, "\n| filter %s", f)
+			}
+		}
+		b.WriteString(`
+| parse k8s.object, "JSON:obj"
+| fieldsAdd ready = coalesce(obj[status][readyReplicas], obj[status][numberReady]), desired = coalesce(obj[spec][replicas], obj[status][desiredNumberScheduled]), created = toTimestamp(obj[metadata][creationTimestamp])
+| fields id, name, type, namespace = k8s.namespace.name, kind = k8s.workload.kind, ready, desired, created` + ", `tags:k8s.labels`" + `
+| sort namespace asc, name asc
+| limit 500`)
+		return b.String()
+	},
+	Columns: []Column{
+		{Title: "NAMESPACE", Field: "namespace", Width: 20},
+		{Title: "NAME", Field: "name"},
+		{Title: "KIND", Field: "kind", Width: 11},
+		{Title: "READY", Width: 6, Right: true, Value: workloadReady, Class: classPodReady,
+			Sort: func(rec map[string]any) any { return Str(rec, "ready") }},
+		SparkColumn("CPU", "cpu", 15, "mCores"),
+		{Title: "AGE", Width: 5, Right: true, Value: func(rec map[string]any) string { return Age(Str(rec, "created")) },
+			Sort: func(rec map[string]any) any { return Str(rec, "created") }},
+	},
+	Entity:      nodeEntity(""),
+	EnterTarget: "pods",
+	Drills:      map[string]string{"l": "logs", "s": "traces", "m": "metrics", "p": "problems", "v": "events"},
+	Enrich: &EnrichSpec{
+		Key:    func(rec map[string]any) string { return Str(rec, "name") },
+		By:     "k8s.workload.name",
+		Series: []string{"cpu"},
+		Query: func(tf Timeframe, keys []string) string {
+			return fmt.Sprintf(
+				"timeseries cpu = sum(dt.kubernetes.container.cpu_usage), by:{k8s.workload.name}, from:%s, interval: %s, filter: { in(k8s.workload.name, {%s}) }",
+				tf.DQL(), sparkInterval(tf), quoteList(keys))
+		},
+	},
+}
+
+// workloadReady lives in detail.go — it reads the list aliases and digs the
+// manifest, so the workloads column and the key-facts panel share one
+// readiness reader (Kubernetes omits readyReplicas when zero are ready).
+
+var namespacesSpec = &Spec{
+	Name:               "namespaces",
+	Aliases:            []string{"ns", "namespace"},
+	Kind:               KindEntity,
+	EntityScoped:       true,
+	Desc:               "Kubernetes namespaces",
+	ProjectPrimaryTags: true,
+	InjectPrimaryTags:  injectPrimaryTagsIntoFields,
+	FacetPriority:      []string{"cluster"},
+	Query: func(s Scope) string {
+		var b strings.Builder
+		b.WriteString(`smartscapeNodes "K8S_NAMESPACE"`)
+		if s.Entity != nil && s.Entity.Type == "K8S_CLUSTER" {
+			fmt.Fprintf(&b, "\n| filter k8s.cluster.name == %q", s.Entity.Name)
+		}
+		b.WriteString("\n| fields id, name, type, cluster = k8s.cluster.name, lifetime, `tags:k8s.labels`\n| sort name asc\n| limit 300")
+		return b.String()
+	},
+	Columns: []Column{
+		{Title: "NAME", Field: "name"},
+		{Title: "CLUSTER", Field: "cluster", Width: 16},
+		{Title: "PODS", Width: 5, Right: true, Value: enrichNum("pods"), Sort: enrichSort("pods")},
+		{Title: "RUNNING", Width: 7, Right: true, Value: enrichNum("running"), Sort: enrichSort("running")},
+		{Title: "SEEN", Width: 5, Right: true, Value: lifetimeAge},
+	},
+	Entity:      nodeEntity("K8S_NAMESPACE"),
+	EnterTarget: "workloads",
+	Drills:      map[string]string{"l": "logs", "s": "traces", "p": "problems", "v": "events"},
+	Enrich: &EnrichSpec{
+		Key:    func(rec map[string]any) string { return Str(rec, "name") },
+		By:     "k8s.namespace.name",
+		Series: []string{"pods", "running"},
+		Query: func(tf Timeframe, keys []string) string {
+			return fmt.Sprintf(
+				"smartscapeNodes \"K8S_POD\", from:%s\n| filter in(k8s.namespace.name, {%s})\n| summarize pods = count(), running = countIf(k8s.pod.phase == \"Running\"), by:{k8s.namespace.name}",
+				tf.DQL(), quoteList(keys))
+		},
+	},
+}
+
+// enrichNum renders a scalar enrichment value (counts joined from a second
+// query rather than a timeseries).
+func enrichNum(alias string) func(rec map[string]any) string {
+	key := EnrichKey(alias)
+	return func(rec map[string]any) string { return FormatValue(rec[key]) }
+}
+
+func enrichSort(alias string) func(rec map[string]any) any {
+	key := EnrichKey(alias)
+	return func(rec map[string]any) any { return rec[key] }
+}
+
+var nodesSpec = &Spec{
+	Name:               "nodes",
+	Aliases:            []string{"no", "node"},
+	Kind:               KindEntity,
+	EntityScoped:       true,
+	Desc:               "Kubernetes nodes",
+	ProjectPrimaryTags: true,
+	InjectPrimaryTags:  injectPrimaryTagsIntoFields,
+	FacetPriority:      []string{"instance", "zone", "cluster"},
+	Query: func(s Scope) string {
+		var b strings.Builder
+		b.WriteString(`smartscapeNodes "K8S_NODE"`)
+		if s.Entity != nil && s.Entity.Type == "K8S_CLUSTER" {
+			fmt.Fprintf(&b, "\n| filter k8s.cluster.name == %q", s.Entity.Name)
+		}
+		b.WriteString(`
+| parse k8s.object, "JSON:obj"
+| fields id, name, type, cluster = k8s.cluster.name, version = obj[status][nodeInfo][kubeletVersion], os = obj[status][nodeInfo][osImage], cpus = obj[status][capacity][cpu], instance = ` + "`tags:k8s.labels`[`node.kubernetes.io/instance-type`], zone = `tags:k8s.labels`[`topology.kubernetes.io/zone`], `tags:k8s.labels`" + `, lifetime
+| sort name asc
+| limit 300`)
+		return b.String()
+	},
+	Columns: []Column{
+		{Title: "NAME", Field: "name"},
+		{Title: "INSTANCE", Field: "instance", Width: 11},
+		{Title: "ZONE", Field: "zone", Width: 10},
+		{Title: "CPUS", Field: "cpus", Width: 4, Right: true},
+		{Title: "PODS", Width: 5, Right: true, Value: enrichNum("pods"), Sort: enrichSort("pods")},
+		{Title: "VERSION", Field: "version", Width: 18},
+		{Title: "SEEN", Width: 5, Right: true, Value: lifetimeAge},
+	},
+	Entity:      nodeEntity("K8S_NODE"),
+	EnterTarget: "pods",
+	Drills:      map[string]string{"l": "logs", "s": "traces", "p": "problems", "v": "events"},
+	Enrich: &EnrichSpec{
+		Key:    func(rec map[string]any) string { return Str(rec, "name") },
+		By:     "k8s.node.name",
+		Series: []string{"pods"},
+		Query: func(tf Timeframe, keys []string) string {
+			return fmt.Sprintf(
+				"smartscapeNodes \"K8S_POD\", from:%s\n| filter in(k8s.node.name, {%s}) and k8s.pod.phase == \"Running\"\n| summarize pods = count(), by:{k8s.node.name}",
+				tf.DQL(), quoteList(keys))
+		},
+	},
+}
+
+var clustersSpec = &Spec{
+	Name:               "clusters",
+	Aliases:            []string{"cl", "cluster"},
+	Kind:               KindEntity,
+	Desc:               "Kubernetes clusters",
+	ProjectPrimaryTags: true,
+	InjectPrimaryTags:  injectPrimaryTagsIntoFields,
+	Query: func(s Scope) string {
+		return `smartscapeNodes "K8S_CLUSTER"
+| fields id, name, type, distribution = k8s.cluster.distribution, version = k8s.cluster.version, lifetime
+| sort name asc
+| limit 100`
+	},
+	Columns: []Column{
+		{Title: "NAME", Field: "name"},
+		{Title: "DISTRIBUTION", Field: "distribution", Width: 12},
+		{Title: "VERSION", Field: "version", Width: 20},
+		{Title: "SEEN", Width: 5, Right: true, Value: lifetimeAge},
+	},
+	Entity:      nodeEntity("K8S_CLUSTER"),
+	EnterTarget: "nodes",
+	Drills:      map[string]string{"l": "logs", "s": "traces", "p": "problems", "v": "events"},
+}
+
+// summarizeClose matches the end of a `| summarize { … }, by:{…}` body. The
+// `\s*` slots tolerate whitespace variations around the brace and comma so
+// injection does not silently break if a spec's template is reformatted.
+var summarizeClose = regexp.MustCompile(`\}\s*,\s*by:`)
+
+// injectPrimaryTagsIntoSummarize embeds takeFirst(primary_tags.<k>) aliases
+// into the summarize body of a pods-style DQL. Pods use | summarize to
+// collapse container rows; | fieldsAdd after the summarize yields null because
+// the field was already projected away. Field references are escaped via
+// escapeField so keys with special characters (e.g. cost-center) stay valid
+// DQL — see docs/dev/learnings.md §1.21.
+func injectPrimaryTagsIntoSummarize(dql string, keys []string) string {
+	if len(keys) == 0 {
+		return dql
+	}
+	// Anchor on the summarize body's closing brace; no-op if absent rather
+	// than emitting malformed DQL.
+	loc := summarizeClose.FindStringIndex(dql)
+	if loc == nil {
+		return dql
+	}
+	extra := make([]string, len(keys))
+	for i, k := range keys {
+		f := escapeField("primary_tags." + k)
+		extra[i] = fmt.Sprintf("%s = takeFirst(%s)", f, f)
+	}
+	// Insert the aliases just before the closing `}` of the summarize body.
+	return dql[:loc[0]] + ", " + strings.Join(extra, ", ") + dql[loc[0]:]
+}
+
+// injectPrimaryTagsIntoFields appends primary_tags.* keys to the explicit
+// | fields projection line of a k8s spec. Workloads/namespaces/nodes/clusters
+// use | fields to extract from nested obj[status][...] blobs and drop the raw
+// manifest; primary_tags.* must be listed explicitly to survive. Field
+// references are escaped via escapeField so keys with special characters stay
+// valid DQL — see docs/dev/learnings.md §1.21.
+func injectPrimaryTagsIntoFields(dql string, keys []string) string {
+	if len(keys) == 0 {
+		return dql
+	}
+	suffix := make([]string, len(keys))
+	for i, k := range keys {
+		suffix[i] = escapeField("primary_tags." + k)
+	}
+	lines := strings.Split(dql, "\n")
+	for i, line := range lines {
+		if strings.HasPrefix(strings.TrimSpace(line), "| fields ") {
+			lines[i] = line + ", " + strings.Join(suffix, ", ")
+			break
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+// quoteList renders string values as a DQL {"a", "b"} set literal body.
+func quoteList(keys []string) string {
+	quoted := make([]string, len(keys))
+	for i, k := range keys {
+		quoted[i] = fmt.Sprintf("%q", k)
+	}
+	return strings.Join(quoted, ", ")
+}
+
+// sparkInterval picks a bucket size that yields ~25-45 points per window —
+// enough shape for an 8-cell braille sparkline without heavy payloads.
+func sparkInterval(tf Timeframe) string {
+	switch {
+	case tf.Dur <= 45*time.Minute:
+		return "1m"
+	case tf.Dur <= 3*time.Hour:
+		return "5m"
+	case tf.Dur <= 30*time.Hour:
+		return "30m"
+	default:
+		return "4h"
+	}
+}

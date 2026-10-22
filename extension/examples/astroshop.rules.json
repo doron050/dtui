@@ -1,0 +1,33 @@
+{
+  "name": "Astroshop RUM",
+  "description": "Deep links from the OpenTelemetry demo 'astroshop' into dtui's RUM views. The Dynatrace RUM agent's beacon posts to <app>/rb_...?...&vi=<SESSION_ID>&...; that vi query param equals dt.rum.session.id in Grail (validated against a live astroshop session). This is a source:\"request\" rule — the background reads the beacon URL at the network layer (no body), extracts vi, and offers the jumps in the floating launcher. Two actions on one page means they collapse into one dtui launcher whose menu lists both under the 'RUM' section. Import on the extension Options page; set the environment URL below to your own tenant (a shared bundle addresses tenants by URL so it needs no agreement on local environment names). NOTE: no trace action is included on purpose — astroshop's browser trace id (server-timing dtTrId / W3C traceparent) does NOT match the backend OTel span trace.id on this deployment, so a 'trace' deep link would silently open an empty waterfall (Grail fails silently on a miss). On a Gen3 tenant you would add a 'GenAI' group here the same way.",
+  "rules": [
+    {
+      "name": "RUM beacon vi= → this session",
+      "matches": [
+        "https://astroshop.example.com/*"
+      ],
+      "source": "request",
+      "urlRegex": "[?&]vi=([A-Za-z0-9]+-\\d+)",
+      "actions": [
+        {
+          "label": "Session event stream",
+          "target": "userevents",
+          "field": "dt.rum.session.id",
+          "group": "RUM",
+          "timeframe": "1d",
+          "environment": "https://abc12345.apps.dynatrace.com/"
+        },
+        {
+          "label": "Errors in this session",
+          "target": "userevents",
+          "lens": "errors",
+          "field": "dt.rum.session.id",
+          "group": "RUM",
+          "timeframe": "1d",
+          "environment": "https://abc12345.apps.dynatrace.com/"
+        }
+      ]
+    }
+  ]
+}

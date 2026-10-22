@@ -1,0 +1,14 @@
+config:
+  MD013: false # prose is not hard-wrapped
+  MD014: false # shell snippets show a prompt
+  MD024: false # repeated headings in ADR sections
+  MD033: false # inline HTML (badges, <kbd>)
+  MD036: false
+  MD038: false # DQL snippet with a trailing space in a code span
+  MD040: false # ASCII diagrams and DQL snippets
+  MD041: false
+globs:
+  - "**/*.md"
+ignores:
+  - wasm/.deps/**
+  - extension/vendor/**

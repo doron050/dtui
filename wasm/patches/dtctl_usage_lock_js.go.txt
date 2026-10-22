@@ -1,0 +1,17 @@
+//go:build js && wasm
+
+// This file is overlaid onto dtctl's pkg/usage package IN PLACE OF
+// lock_unix.go for the js/wasm build only (see wasm/build.sh). The upstream
+// file is tagged `//go:build !windows`, so it is wrongly compiled for GOOS=js
+// and pulls in golang.org/x/sys/unix, which has no js/wasm implementation.
+// The real fix is to retag it `!windows && !js` and add a js stub upstream.
+
+package usage
+
+import "time"
+
+// acquireLock is a no-op in the browser build: there is no shared filesystem
+// to coordinate usage-ledger writers across processes.
+func acquireLock(lockPath string, timeout time.Duration) (func(), error) {
+	return func() {}, nil
+}

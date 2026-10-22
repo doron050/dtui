@@ -1,0 +1,42 @@
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    labels:
+      - dependencies
+    commit-message:
+      prefix: "chore(deps)"
+    cooldown:
+      default-days: 3
+    ignore:
+      - dependency-name: "github.com/charmbracelet/*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      # dtctl and dtctl/sdk must move together or the build breaks.
+      dtctl:
+        patterns:
+          - "github.com/dynatrace-oss/dtctl*"
+      # Coupled rendering stack; bumps can change output.
+      charmbracelet:
+        patterns:
+          - "github.com/charmbracelet/*"
+          - "github.com/muesli/termenv"
+      go-minor-patch:
+        update-types:
+          - minor
+          - patch
+  # Actions are pinned by commit SHA, which nothing updates by hand -- without
+  # this entry the pins silently rot. Dependabot rewrites both the SHA and the
+  # trailing version comment.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    labels:
+      - dependencies
+    commit-message:
+      prefix: "chore(ci)"
+    cooldown:
+      default-days: 3

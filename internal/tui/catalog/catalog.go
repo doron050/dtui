@@ -1,0 +1,781 @@
+// Package catalog defines the declarative view catalog for the dtctl TUI.
+//
+// Each view is a Spec: a scope-aware DQL query template plus curated columns
+// and drill-down targets. Adding a view is configuration, not plumbing (see
+// docs/design/tui.md, "The ViewSpec catalog"). The package is free of any
+// TUI framework dependency so query composition can be tested as plain data.
+//
+// # Curating an entity type
+//
+// Per-entity-type behavior is dispatched at these points — when curating a
+// new Smartscape type, walk this list (most are optional; the scope filters
+// derive from the type name and often need nothing):
+//
+//   - KeyFacts (detail.go): the detail page's curated facts panel.
+//   - MetricsFor (specs.go): the canned metric charts ('m'); uncurated
+//     types fall back to the metric explorer automatically.
+//   - smartscapeField / legacyField / k8sNameFilter (catalog.go): how
+//     signal records reference the entity — smartscapeField derives from
+//     the type name (GENAI_* excepted), the other two enumerate the
+//     live-validated exceptions.
+//   - SpanScopable (catalog.go): whether the 's' spans drill is offered —
+//     prefix rules (K8S_*, GENAI_*) keep new subtypes covered.
+//   - k8sScopeFilter (k8s.go): K8s list narrowing by containment.
+//   - VulnEntityFilter (security.go): security.events scoping — the ID-era
+//     mapping is per-type and live-validated; unknown types refuse.
+//   - PreviewTitle/PreviewFacts (preview.go) and PriorityFields
+//     (detail.go): record-kind curation for the preview pane and inspector.
+//
+// These stay separate switches on purpose: each encodes independently
+// live-validated semantics (several with open-ended prefix rules a keyed
+// table would lose), and most types need only a subset.
+package catalog
+
+import (
+	"fmt"
+	"regexp"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+)
+
+// Entity identifies a Smartscape entity used for scoping signal queries.
+type Entity struct {
+	ID   string // Smartscape ID string, e.g. "HOST-0000000000000011"
+	Name string
+	Type string // Smartscape node type, e.g. "HOST", "SERVICE", "K8S_POD"
+
+	// ModuleHost/ModuleLogDir scope a fleet MODULE row's agent logs. A module's
+	// own log records are stamped with the module's agent process — a churny
+	// PGI that rarely matches the process ID resolved from the ONEAGENT_METADATA
+	// snapshot (only ~36% of module processes appear in ANY oneagent log record,
+	// validated live on a tenant), so those logs are unreachable by process. The
+	// stable join is the module's host plus its fixed subdirectory under
+	// /var/log/dynatrace/oneagent/. Set only for module rows with a known
+	// subdir; a real PROCESS entity leaves them empty and scopes by ID.
+	ModuleHost   string // dt.smartscape.host of the module's OneAgent
+	ModuleLogDir string // oneagent log subdir, e.g. "loganalytics" (from module.type)
+}
+
+// Timeframe is the global query window applied to every view. From/To pin
+// the window absolutely (a problem's lifespan); zero From means the relative
+// Label window.
+type Timeframe struct {
+	Label string // DQL relative duration, e.g. "2h"
+	Dur   time.Duration
+	// From/To bound an absolute window. To may be zero (open-ended: an
+	// ACTIVE problem's window runs to now). Dur should be set to To-From so
+	// interval heuristics keep working.
+	From, To time.Time
+}
+
+// Absolute reports whether the window is pinned to fixed instants.
+func (t Timeframe) Absolute() bool { return !t.From.IsZero() }
+
+// DQL returns the timeframe as a DQL from: value. An absolute window renders
+// BOTH bounds — `toTimestamp("…"), to:toTimestamp("…")` — through the same
+// `from:%s` slot every query template uses; from:/to: accept toTimestamp
+// literals in every command position the catalog composes (validated live).
+func (t Timeframe) DQL() string {
+	if !t.Absolute() {
+		return "now() - " + t.Label
+	}
+	out := dqlTimestamp(t.From)
+	if !t.To.IsZero() {
+		out += ", to:" + dqlTimestamp(t.To)
+	}
+	return out
+}
+
+func dqlTimestamp(t time.Time) string {
+	return fmt.Sprintf("toTimestamp(%q)", t.UTC().Format("2006-01-02T15:04:05.000Z"))
+}
+
+// Timeframes are the picker choices, ordered short to long.
+var Timeframes = []Timeframe{
+	{Label: "30m", Dur: 30 * time.Minute},
+	{Label: "2h", Dur: 2 * time.Hour},
+	{Label: "24h", Dur: 24 * time.Hour},
+	{Label: "7d", Dur: 7 * 24 * time.Hour},
+}
+
+// DefaultTimeframe is the window used at startup.
+var DefaultTimeframe = Timeframes[1]
+
+// timeframeLabelRe matches the workspace-file timeframe labels.
+var timeframeLabelRe = regexp.MustCompile(`^([0-9]+)([mhd])$`)
+
+// ParseTimeframe parses a timeframe label ("30m", "2h", "3d") into a
+// Timeframe — the .dtui.yaml startup default. Picker presets are reused
+// when the label matches one, so the picker highlight lands on the right
+// pill; other valid labels build a custom relative window (the highlight then
+// stays on the picker default — cosmetic only, DQL uses the label verbatim).
+func ParseTimeframe(label string) (Timeframe, bool) {
+	for _, tf := range Timeframes {
+		if tf.Label == label {
+			return tf, true
+		}
+	}
+	m := timeframeLabelRe.FindStringSubmatch(label)
+	if m == nil {
+		return Timeframe{}, false
+	}
+	n, err := strconv.Atoi(m[1])
+	if err != nil || n <= 0 {
+		return Timeframe{}, false
+	}
+	unit := map[string]time.Duration{"m": time.Minute, "h": time.Hour, "d": 24 * time.Hour}[m[2]]
+	return Timeframe{Label: label, Dur: time.Duration(n) * unit}, true
+}
+
+// Scope carries the context every query composes: the entity the user is
+// standing on (nil = unscoped) and the global timeframe. Drill-down
+// navigation fills Entity so signal views are never opened unbounded.
+type Scope struct {
+	Entity    *Entity
+	Timeframe Timeframe
+	// Entities scopes a signal view to several entities at once (a problem's
+	// affected set). When set it wins over Entity; specs compose it via
+	// ScopeSignalFilter / ScopeSpanFilter.
+	Entities []Entity
+	// Arg is a view-specific argument: the node type for the generic entity
+	// browser ("AWS_EC2_INSTANCE"), the table/bucket/file for the record
+	// sampler, the model for the dictionary fields view, the monitor id
+	// for synthetic executions — set by EnterArg drill-downs — or the
+	// vulnerable code location scoping the attacks view.
+	Arg string
+	// TraceID scopes logs/traces to one distributed trace (log↔trace jumps).
+	TraceID string
+	// Lens indexes into the spec's Lenses (0 = default). Views without
+	// lenses ignore it.
+	Lens int
+	// Pattern scopes the logs view to records matching a DPL pattern —
+	// the log-patterns drill (enter on a pattern row) fills it.
+	Pattern string
+	// LogHead flips a logs fetch to oldest-first (the head of the stream);
+	// the default is newest-first (the tail). The reader's head/tail toggle
+	// sets it. It changes the DQL sort direction, so it is a re-fetch, not a
+	// client re-sort — "head" returns the oldest N in the timeframe, which the
+	// already-fetched newest N can never show.
+	LogHead bool
+	// Limit overrides a logs fetch's row cap (0 = the spec default). "Load
+	// more" raises it in steps so one stream can run past the default cap. The
+	// cap applies after the sort (post-scan), so raising it grows the rows held
+	// and rendered, not Grail's scan — cheap on the tenant.
+	Limit int
+
+	// PrimaryTagKeys is the ordered set of primary_tags.* bare keys discovered
+	// (and unioned with the declared set) by the metric-roster discovery pass.
+	// Filled by tableView.composeDQL for MetricRoster specs; nil for all others.
+	PrimaryTagKeys []string
+	// MetricDims is the full set of dimension keys discovered by the metric-roster
+	// pass-1 query (minus the identity/bookkeeping exclude set). Used for facet
+	// candidates and the /- search contains-chain.
+	MetricDims []string
+	// FilterConds is the list of bare DQL predicates (no "| filter " prefix) to
+	// embed in the timeseries filter:{} argument. Filled from the active facets
+	// and search terms for MetricRoster specs.
+	FilterConds []string
+}
+
+// ViewKind distinguishes entity views (the map) from signal views (the terrain).
+type ViewKind int
+
+const (
+	KindEntity ViewKind = iota
+	KindSignal
+)
+
+// Column describes one curated table column.
+type Column struct {
+	Title string
+	Field string // record key; ignored when Value is set
+	Width int    // display width; 0 = flex (shares remaining space)
+	Right bool   // right-align (numeric columns)
+	// Value computes the cell text from the whole record (optional).
+	Value func(rec map[string]any) string
+	// Class returns a semantic style class ("error", "warn", "ok", "dim", "")
+	// for the formatted cell value (optional). The view layer maps classes to
+	// concrete styles.
+	Class func(val string) string
+	// Sort extracts the sort key for a record (optional). Defaults to the raw
+	// field value (Field set) or the rendered cell text. Numeric strings —
+	// Grail serializes longs and durations as strings — compare numerically.
+	Sort func(rec map[string]any) any
+}
+
+// Text returns the formatted cell value for a record.
+func (c Column) Text(rec map[string]any) string {
+	if c.Value != nil {
+		return c.Value(rec)
+	}
+	return FormatValue(rec[c.Field])
+}
+
+// Lens is one quick server-side slice of a view's dataset — the spans view
+// offers roots/errors/server/…. Lenses render as a strip above the table
+// ([ and ] cycle; digits stay global hotkeys), and the active lens' filter is
+// part of the spec's Query output, so facet exploration and the DQL echo see
+// it too.
+type Lens struct {
+	Name   string // strip label ("roots")
+	Desc   string // one-liner shown in the status bar on switch
+	Filter string // DQL condition the query composes ("" = unfiltered)
+	// Columns overrides the spec's columns while this lens is active
+	// (db → statement columns, genai → token columns). nil = spec columns.
+	Columns []Column
+}
+
+// Spec is a declarative view definition.
+type Spec struct {
+	Name    string
+	Aliases []string
+	Kind    ViewKind
+	Desc    string
+	// Query renders the list query for a scope. Signal views compose
+	// s.Entity into a filter; entity views honor it when EntityScoped.
+	// nil for API-backed views without an underlying query (see API).
+	Query   func(s Scope) string
+	Columns []Column
+	// API names a non-DQL data source (wired in tui.Options.Sources) that
+	// fetches this view's records: REST-backed lists (SLOs, anomaly
+	// detectors) and analyzer executions (log patterns). When Query is also
+	// set, its output is handed to the source as input — the log-patterns
+	// source analyzes the composed logs query. Server facets need
+	// fieldsSummary and stay disabled for API views; server search applies
+	// only when Query is set.
+	API string
+	// Echo renders the CLI equivalent for API-backed views (dql is the
+	// composed Query output, "" when Query is nil). DQL views echo
+	// `dtctl query` automatically and leave this nil.
+	Echo func(s Scope, dql string) string
+	// Dynamic derives the column set from the fetched records (the record
+	// sampler browses arbitrary tables); Columns is the empty-result
+	// fallback.
+	Dynamic bool
+	// ScopeColumns derives a scope-specific column set (the logs pattern
+	// drill shows the pattern's extracted fields); nil result falls back to
+	// the lens/static columns.
+	ScopeColumns func(s Scope) []Column
+	// Lenses are the view's quick subset selections (nil = none). The
+	// spec's Query is responsible for composing the scoped lens' Filter.
+	Lenses []Lens
+	// Entity extracts the Smartscape entity a selected row stands for
+	// (nil when the row carries none). It supplies the scope for drills.
+	Entity func(rec map[string]any) *Entity
+	// Drills maps a key press to a target view name. The special target
+	// "metrics" opens the canned metrics charts for the selected entity.
+	Drills map[string]string
+	// EntityScoped marks entity views whose Query composes s.Entity (e.g.
+	// pods of a namespace). Signal views are always entity-scoped. The pin
+	// (⌖) is only handed to views that can use it.
+	EntityScoped bool
+	// EnterTarget makes enter follow containment k9s-style (workload → its
+	// pods) instead of opening the detail page; the detail page moves to
+	// 'd'. The target view is scoped to the row's entity — unless EnterArg
+	// is set, which scopes it by Arg instead (census row → typed list). The
+	// sentinel "waterfall" opens the trace waterfall for Trace(rec).
+	EnterTarget string
+	EnterArg    func(rec map[string]any) string
+	// Trace extracts a row's trace id ("" = none): the 's' jump on log
+	// records and enter on trace rows.
+	Trace func(rec map[string]any) string
+	// Enrich adds async per-row metric columns (sparklines) fetched in one
+	// batched timeseries query after the list loads (nil = none).
+	Enrich *EnrichSpec
+	// Hop widens the scope in a pre-query before the view's first fetch
+	// (nil = none) — the logs view resolves a service's runtime entities
+	// because log records rarely carry service IDs (see LogHopQuery).
+	Hop *HopSpec
+	// Scopable refines CanScope for views whose query composes a filter that
+	// is present but useless for some entity types — traces filter by a
+	// dt.smartscape.* field spans only carry for some types. nil = rely on
+	// the query-diff check alone.
+	Scopable func(e Entity) bool
+	// Inspect marks rows that, on enter, open the module detail page rather
+	// than navigating to the row's Entity detail page (nil = never). It is for
+	// synthetic rows that stand for a scope but are not Smartscape nodes of
+	// their own — a fleet module row's Entity is the process it monitors (so
+	// the signal tabs and drills scope by it), but the page must lead with the
+	// module's own record STATICALLY (a record tab), never navigating into the
+	// process and refetching its node. The module page adds the module's agent
+	// logs and events tabs alongside that static record.
+	Inspect func(rec map[string]any) bool
+	// RawReadable marks a logs-shaped view (a timestamped stream with a flex
+	// "content" body column) that offers the raw reader: a file-like, wrapped
+	// rendering of the body column with an optional per-record metadata line,
+	// plus the head/tail order toggle and "load more" cap-raising. The reader
+	// treats the first flex (Width==0) column as the body and the rest as the
+	// metadata prefix, so it needs no per-spec configuration beyond this flag.
+	RawReadable bool
+	// RecordCap overrides the default 1000-record executor cap for this view's
+	// list fetch (0 = default). Bounded metadata tables that legitimately hold
+	// more than a page — the semantic dictionary's ~1400 field definitions —
+	// set this so the list is not silently truncated; the view's Query must
+	// raise its own `| limit` to match.
+	RecordCap int64
+	// ProjectPrimaryTags enables primary-tag column injection for this spec.
+	// When true and the workspace declares primary-tag keys, composeDQL embeds
+	// those keys into the query so the columns have non-null values to render.
+	//
+	// Two injection paths exist — pick the one that matches the query shape:
+	//
+	//   | fieldsRemove specs (keep-all-minus-noise, e.g. hosts, processes):
+	//     Leave InjectPrimaryTags nil. primary_tags.* survives the pipeline
+	//     intact, so composeDQL can append | fieldsAdd stages after the body.
+	//
+	//   | fields / | summarize specs (explicit projection, e.g. all k8s specs):
+	//     Set InjectPrimaryTags to a function that embeds the keys inside the
+	//     projection boundary. A post-hoc | fieldsAdd yields null here because
+	//     the field was already projected away before that stage runs.
+	//
+	// Signal views (logs/spans/events) leave this false — their fetch commands
+	// keep all record fields, so primary_tags.* appears naturally and no DQL
+	// injection is needed. Primary-tag columns are still added to the column
+	// set (primaryTagColumns has no Kind guard); they render populated for
+	// records that carry the fields and empty for those that don't.
+	// The services MetricRoster also leaves this false — services carry primary
+	// tags via takeAny in the timeseries by: clause, not via this path.
+	ProjectPrimaryTags bool
+
+	// InjectPrimaryTags is called by composeDQL when ProjectPrimaryTags is true
+	// and the spec uses an explicit field projection (| fields or | summarize).
+	// It receives the rendered DQL string and the active primary-tag key slice
+	// and must return DQL with those keys embedded inside the projection
+	// boundary — either appended to the | fields list or added as takeFirst(…)
+	// aliases inside the | summarize body.
+	//
+	// When nil, composeDQL falls back to appending | fieldsAdd stages before
+	// the sort/limit tail, which is correct for | fieldsRemove-style specs.
+	//
+	// See injectPrimaryTagsIntoFields and injectPrimaryTagsIntoSummarize in
+	// k8s.go for reusable implementations, and docs/design/tui.md
+	// "Primary-tag columns and projection" for the full decision tree.
+	InjectPrimaryTags func(dql string, keys []string) string
+
+	// DiscoverQuery renders a metric-descriptor sampling query whose records'
+	// field names teach the view which dimensions and primary-tag keys exist.
+	// Non-nil marks this as a MetricRoster spec; the discovery result is cached
+	// per context+segment combination and feeds Scope.PrimaryTagKeys /
+	// Scope.MetricDims into the main Query.
+	DiscoverQuery func(s Scope) string
+	// MetricRoster marks specs whose list query is a timeseries/metrics-based
+	// roster with filter:{} pre-aggregation rather than a fetch/smartscapeNodes
+	// pipeline. When true, composeDQL embeds facets + search into filter:{}
+	// instead of injecting | filter / | search stages.
+	MetricRoster bool
+
+	// FacetPriority pins the most useful facet fields to the top of the picker,
+	// in the given order, ahead of the alphabetical scalars and the discovered
+	// smartscape tag tail (tags:<context> keys, always last) — the "preselected
+	// filters on top" that keep the selector readable once a tag-heavy entity
+	// floods the tail with keys. Entries not present in the fetched sample are
+	// skipped. Scalar-only: tag facets are discovered lazily and always trail,
+	// so listing a tag key here has no effect. See docs/dev/learnings.md §1.22.
+	FacetPriority []string
+}
+
+// ServiceMetricKeys are the four service-metric keys that feed the roster.
+var ServiceMetricKeys = []string{
+	"dt.service.request.count",
+	"dt.service.faas_invoke.count",
+	"dt.service.messaging.process.count",
+	"dt.service.request.service_mesh.count",
+}
+
+// ServiceDimExclude is the bookkeeping/identity set stripped from the
+// pass-1 discovery scan — these fields are on every series but are noise
+// as facet candidates or primary-tag keys.
+var ServiceDimExclude = map[string]bool{
+	"metric.key":                  true,
+	"dt.metrics.source":           true,
+	"dt.system.monitoring_source": true,
+	"failed":                      true,
+	"dt.smartscape.service":       true,
+	"dt.entity.process_group":     true,
+}
+
+// ScanMetricDims scans the field names of metric-descriptor records (pass-1
+// discovery results), strips the exclude set, and returns the remaining dims
+// plus the primary-tag keys extracted from them. dims contains all returned
+// keys in sorted order; primaryTagKeys preserves the declared order from
+// declaredKeys first, then any discovered primary_tags.* keys not already
+// declared.
+func ScanMetricDims(records []map[string]any, exclude map[string]bool, declaredKeys []string) (dims []string, primaryTagKeys []string) {
+	seen := map[string]bool{}
+	for _, rec := range records {
+		for k := range rec {
+			if !exclude[k] && !seen[k] {
+				seen[k] = true
+				dims = append(dims, k)
+			}
+		}
+	}
+	sort.Strings(dims)
+
+	// primaryTagKeys = declared order first, then undeclared discovered tags.
+	declaredSeen := map[string]bool{}
+	primaryTagKeys = make([]string, 0, len(declaredKeys))
+	for _, k := range declaredKeys {
+		declaredSeen[k] = true
+		primaryTagKeys = append(primaryTagKeys, k)
+	}
+	for _, d := range dims {
+		if bare, ok := strings.CutPrefix(d, "primary_tags."); ok {
+			if !declaredSeen[bare] {
+				primaryTagKeys = append(primaryTagKeys, bare)
+			}
+		}
+	}
+	return dims, primaryTagKeys
+}
+
+// UsesScope reports whether a view's query can compose an entity scope.
+func (s *Spec) UsesScope() bool { return s.Kind == KindSignal || s.EntityScoped }
+
+// LensAt returns the lens at index i, falling back to the default (first)
+// lens when i is out of range — stale history entries must survive catalog
+// reorderings. Zero value for views without lenses.
+func (s *Spec) LensAt(i int) Lens {
+	return lensAt(s.Lenses, i)
+}
+
+// lensAt is the clamp behind LensAt, callable from Query closures — a spec's
+// Query cannot reference its own Spec var (initialization cycle), but it can
+// reference the lens slice.
+func lensAt(lenses []Lens, i int) Lens {
+	if len(lenses) == 0 {
+		return Lens{}
+	}
+	if i < 0 || i >= len(lenses) {
+		i = 0
+	}
+	return lenses[i]
+}
+
+// floorTimeframe widens a query window to at least min — sparse tables
+// (sessions, bizevents, vulnerability state reports) look deceptively empty
+// over the default 2h. Absolute windows are deliberate and never widened.
+func floorTimeframe(tf Timeframe, min time.Duration, label string) string {
+	if !tf.Absolute() && tf.Dur < min {
+		return "now() - " + label
+	}
+	return tf.DQL()
+}
+
+// CanScope reports whether pinning entity e meaningfully narrows this view.
+// It is honest by construction: if composing the entity does not change the
+// generated query (an incompatible type — a SERVICE pin on :pods, or any pin
+// on a view whose query ignores scope), the pin must be neither applied nor
+// claimed in the breadcrumb. Scopable catches the subtler case where the
+// filter differs but would match nothing (traces on a non-span-scopable
+// type).
+func (s *Spec) CanScope(tf Timeframe, e Entity) bool {
+	if s.Query == nil {
+		return false
+	}
+	if s.Query(Scope{Timeframe: tf, Entity: &e}) == s.Query(Scope{Timeframe: tf}) {
+		return false
+	}
+	if s.Scopable != nil {
+		return s.Scopable(e)
+	}
+	return true
+}
+
+// EnrichSpec describes the batched metric enrichment of an entity table.
+// One query per refresh fetches a small timeseries per visible row; results
+// land in the records under Into keys and render as sparkline columns.
+type EnrichSpec struct {
+	// Key returns the record's join value (e.g. its Smartscape id or pod
+	// name); rows with "" are skipped.
+	Key func(rec map[string]any) string
+	// By is the result field carrying the join value in the batched query.
+	By string
+	// Series lists the timeseries aliases to copy into the record, stored
+	// under "__enrich." + alias.
+	Series []string
+	// Query renders the batched timeseries for a set of join values.
+	Query func(tf Timeframe, keys []string) string
+}
+
+// EnrichKey is the record key enrichment series are stored under.
+func EnrichKey(alias string) string { return "__enrich." + alias }
+
+// HopSpec widens a view's scope with entities resolved in a pre-query
+// before the first fetch. It exists for the logs view: most log records
+// carry no service ID, so a plain SERVICE filter reads as "this service
+// logs nothing" — the hop follows the topology to the entities whose IDs
+// logs do carry. Resolved once per view; refreshes reuse the widened set.
+type HopSpec struct {
+	// Query renders the resolution query ("" = this scope needs no hop).
+	Query func(s Scope) string
+	// Apply merges the hop records into the widened entity set. The
+	// original entity stays first — its own filter arms still match
+	// directly-stamped records.
+	Apply func(s Scope, records []map[string]any) []Entity
+}
+
+// specs is the ordered registry; order drives command-bar suggestions.
+var specs = []*Spec{
+	problemsSpec, servicesSpec, hostsSpec, processesSpec, logsSpec, tracesSpec, eventsSpec,
+	podsSpec, containersSpec, workloadsSpec, namespacesSpec, nodesSpec, clustersSpec, fleetSpec, modulesSpec, agentLogsSpec,
+	awsSpec, azureSpec, entitiesSpec, resourcesSpec,
+	frontendsSpec, databasesSpec, genaiSpec, vulnsSpec, attacksSpec, metricsSpec,
+	sessionsSpec, userEventsSpec, bizeventsSpec,
+	patternsSpec, slosSpec, detectorsSpec, dashboardsSpec,
+	syntheticSpec, executionsSpec,
+	dictionarySpec,
+	tablesSpec, bucketsSpec, filesSpec, recordsSpec,
+}
+
+// All returns every registered view spec.
+func All() []*Spec { return specs }
+
+// Names returns the canonical view names.
+func Names() []string {
+	names := make([]string, len(specs))
+	for i, s := range specs {
+		names[i] = s.Name
+	}
+	return names
+}
+
+// Lookup resolves a view by exact name or alias.
+func Lookup(name string) *Spec {
+	name = strings.ToLower(strings.TrimSpace(name))
+	for _, s := range specs {
+		if s.Name == name {
+			return s
+		}
+		for _, a := range s.Aliases {
+			if a == name {
+				return s
+			}
+		}
+	}
+	return nil
+}
+
+// Match returns specs whose name or alias fuzzy-matches the input, for the
+// command bar. Prefix matches rank before subsequence matches.
+func Match(input string) []*Spec { return MatchSpecs(specs, input) }
+
+// MatchSpecs is Match over an explicit candidate list — the command bar
+// matches its bespoke screens (home, query, nav) together with the registry.
+// Ranking, best first: exact name/alias, then prefix, then subsequence. The
+// exact tier matters because the command bar opens the highlighted match, and
+// a token can be one view's exact alias while merely prefixing another's name
+// ("ho" is the exact alias of "hosts" but a prefix of the bespoke "home"
+// entry); the exact alias must win so the highlight — and thus what enter
+// opens — is that view.
+func MatchSpecs(candidates []*Spec, input string) []*Spec {
+	input = strings.ToLower(strings.TrimSpace(input))
+	if input == "" {
+		return candidates
+	}
+	var exact, prefix, sub []*Spec
+	for _, s := range candidates {
+		names := append([]string{s.Name}, s.Aliases...)
+		matched := 0 // 0 = no, 1 = subsequence, 2 = prefix, 3 = exact
+		for _, n := range names {
+			switch {
+			case n == input:
+				matched = 3
+			case strings.HasPrefix(n, input):
+				if matched < 2 {
+					matched = 2
+				}
+			case isSubsequence(input, n):
+				if matched < 1 {
+					matched = 1
+				}
+			}
+		}
+		switch matched {
+		case 3:
+			exact = append(exact, s)
+		case 2:
+			prefix = append(prefix, s)
+		case 1:
+			sub = append(sub, s)
+		}
+	}
+	return append(append(exact, prefix...), sub...)
+}
+
+func isSubsequence(needle, hay string) bool {
+	i := 0
+	for _, r := range hay {
+		if i < len(needle) && rune(needle[i]) == r {
+			i++
+		}
+	}
+	return i == len(needle)
+}
+
+// --- scope filter fragments -------------------------------------------------
+
+// smartscapeField returns the dt.smartscape.* field signal records carry for
+// an entity type. Validated live for HOST/SERVICE/PROCESS/K8S_*/CONTAINER/
+// FRONTEND/DB_*_POSTGRES/AWS_*: the field name is always the lowercased type.
+// GenAI is the exception: GENAI_MODEL nodes stamp spans as
+// dt.smartscape.gen_ai.model (dot namespace, not genai_model — validated
+// live on chat/invoke_agent spans). A nonexistent field in an or-chain
+// compares as null (false) — harmless.
+func smartscapeField(entityType string) string {
+	if entityType == "" {
+		return ""
+	}
+	if kind, ok := strings.CutPrefix(entityType, "GENAI_"); ok {
+		return "dt.smartscape.gen_ai." + strings.ToLower(kind)
+	}
+	return "dt.smartscape." + strings.ToLower(entityType)
+}
+
+// legacyField returns the deprecated dt.entity.* field for an entity type.
+// Records carry both ID eras during the Smartscape migration, so scope
+// filters must match either (docs/design/tui.md, "Dual entity-ID eras").
+func legacyField(entityType string) string {
+	switch entityType {
+	case "HOST":
+		return "dt.entity.host"
+	case "SERVICE":
+		return "dt.entity.service"
+	case "PROCESS":
+		return "dt.entity.process_group_instance"
+	case "PROCESS_GROUP":
+		// Not a Smartscape node type — the security views hand PROCESS_GROUP
+		// pseudo-entities to SignalFilter because security.events stamp
+		// dt.entity.process_group (validated live on attack records).
+		return "dt.entity.process_group"
+	}
+	return ""
+}
+
+// SignalFilter renders the DQL condition that scopes a logs/events query to
+// an entity, matching both ID eras plus the record's source entity. For K8s
+// entities it also matches the plain k8s.* name attributes — log records on
+// real tenants carry those but no dt.smartscape.k8s_* fields (validated
+// live), while Davis events carry both.
+func SignalFilter(e Entity) string {
+	var parts []string
+	if f := smartscapeField(e.Type); f != "" {
+		parts = append(parts, fmt.Sprintf("%s == toSmartscapeId(%q)", f, e.ID))
+	}
+	if f := legacyField(e.Type); f != "" {
+		parts = append(parts, fmt.Sprintf("%s == %q", f, e.ID))
+	}
+	if f := k8sNameFilter(e); f != "" {
+		parts = append(parts, f)
+	}
+	parts = append(parts, fmt.Sprintf("dt.smartscape_source.id == toSmartscapeId(%q)", e.ID))
+	return strings.Join(parts, " or ")
+}
+
+// entityList returns the scope's entity set: Entities when set, else the
+// singleton Entity, else none.
+func (s Scope) entityList() []Entity {
+	if len(s.Entities) > 0 {
+		return s.Entities
+	}
+	if s.Entity != nil {
+		return []Entity{*s.Entity}
+	}
+	return nil
+}
+
+// ScopeSignalFilter renders the logs/events filter for the scope's entity or
+// entity set ("" when unscoped). A single entity composes exactly like
+// SignalFilter; several or-join, each parenthesized.
+func ScopeSignalFilter(s Scope) string {
+	ents := s.entityList()
+	switch len(ents) {
+	case 0:
+		return ""
+	case 1:
+		return SignalFilter(ents[0])
+	}
+	parts := make([]string, len(ents))
+	for i, e := range ents {
+		parts[i] = "(" + SignalFilter(e) + ")"
+	}
+	return strings.Join(parts, " or ")
+}
+
+// ScopeSpanFilter renders the spans filter for the scope's entity set,
+// keeping only span-scopable types — a filter on a type spans never carry
+// would silently match nothing. "" when unscoped or nothing is scopable.
+func ScopeSpanFilter(s Scope) string {
+	var parts []string
+	for _, e := range s.entityList() {
+		if SpanScopable(e.Type) {
+			parts = append(parts, SpanFilter(e))
+		}
+	}
+	switch len(parts) {
+	case 0:
+		return ""
+	case 1:
+		return parts[0]
+	}
+	for i, p := range parts {
+		parts[i] = "(" + p + ")"
+	}
+	return strings.Join(parts, " or ")
+}
+
+// k8sNameFilter matches a K8s entity by its k8s.* name attributes ("" for
+// non-K8s types). Signal records carry these as plain strings.
+func k8sNameFilter(e Entity) string {
+	if e.Name == "" {
+		return ""
+	}
+	switch e.Type {
+	case "K8S_POD":
+		return fmt.Sprintf("k8s.pod.name == %q", e.Name)
+	case "K8S_NAMESPACE":
+		return fmt.Sprintf("k8s.namespace.name == %q", e.Name)
+	case "K8S_NODE":
+		return fmt.Sprintf("k8s.node.name == %q", e.Name)
+	case "K8S_CLUSTER":
+		return fmt.Sprintf("k8s.cluster.name == %q", e.Name)
+	case "K8S_DEPLOYMENT", "K8S_STATEFULSET", "K8S_DAEMONSET":
+		kind := strings.ToLower(strings.TrimPrefix(e.Type, "K8S_"))
+		return fmt.Sprintf("(k8s.workload.kind == %q and k8s.workload.name == %q)", kind, e.Name)
+	}
+	return ""
+}
+
+// ProblemFilter renders the DQL condition that scopes dt.davis.problems to
+// problems affecting an entity (either ID era).
+func ProblemFilter(e Entity) string {
+	return fmt.Sprintf(
+		`matchesPhrase(arrayToString(smartscape.affected_entity.ids, delimiter:","), %q) or matchesPhrase(arrayToString(affected_entity_ids, delimiter:","), %q)`,
+		e.ID, e.ID)
+}
+
+// SpanFilter renders the DQL condition that scopes a spans query to an
+// entity. Spans carry dt.smartscape.* fields for services, K8s objects,
+// containers and — on OneAgent fullstack tenants — hosts (validated live);
+// there is no legacy fallback worth matching.
+func SpanFilter(e Entity) string {
+	return fmt.Sprintf("%s == toSmartscapeId(%q)", smartscapeField(e.Type), e.ID)
+}
+
+// SpanScopable reports whether spans can be filtered to this entity type —
+// the 's' drill is only offered where the scope field actually exists on
+// span records. HOST is included: OneAgent fullstack spans carry
+// dt.smartscape.host (re-validated live 2026-07 — ~73–98% of spans; the
+// earlier "HOST carries none" note held only on a pure-OTLP tenant, where the
+// drill degrades to an empty result like any other span field that tenant
+// lacks). GenAI spans carry dt.smartscape.gen_ai.* ids for
+// agent/model/provider/service.
+func SpanScopable(entityType string) bool {
+	switch entityType {
+	case "SERVICE", "CONTAINER", "HOST":
+		return true
+	}
+	return strings.HasPrefix(entityType, "K8S_") || strings.HasPrefix(entityType, "GENAI_")
+}

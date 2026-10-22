@@ -1,0 +1,17 @@
+//go:build js && wasm
+
+// This file is overlaid into dtctl's pkg/output package for the js/wasm build
+// (see wasm/build.sh). Upstream, setupResizeSignal/stopResizeSignal are defined
+// only in live_unix.go (`//go:build unix`) and live_windows.go
+// (`//go:build windows`) — neither of which matches GOOS=js, so the methods are
+// undefined for wasm. The real fix is a `//go:build js` variant upstream in
+// dtctl; this overlay is the js/wasm stand-in.
+
+package output
+
+// setupResizeSignal is a no-op in the browser build: there is no SIGWINCH, and
+// terminal resize arrives as a tea.WindowSizeMsg from the JS bridge instead.
+func (p *LivePrinter) setupResizeSignal() {}
+
+// stopResizeSignal is a no-op in the browser build.
+func (p *LivePrinter) stopResizeSignal() {}
