@@ -7,6 +7,7 @@ config:
   MD038: false # DQL snippet with a trailing space in a code span
   MD040: false # ASCII diagrams and DQL snippets
   MD041: false
+  MD060: false # table pipe spacing; tables are valid as written
 globs:
   - "**/*.md"
 ignores:

@@ -16,6 +16,7 @@ jobs:
     name: Analyze Go
     runs-on: ubuntu-latest
     permissions:
+      actions: read # required on private repos to read the workflow run
       security-events: write # upload results
       contents: read
     steps:
