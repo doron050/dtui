@@ -41,6 +41,16 @@ archives:
     format_overrides:
       - goos: windows
         formats: [zip]
+    # Listing files replaces GoReleaser's defaults, so LICENSE and README are
+    # repeated here. NOTICE and the third_party/ files satisfy the attribution
+    # terms of the bundled dependencies; regenerate them with
+    # scripts/third-party-licenses.sh.
+    files:
+      - LICENSE
+      - NOTICE
+      - README.md
+      - third_party/THIRD_PARTY_LICENSES.txt
+      - third_party/licenses.csv
 
 checksum:
   name_template: checksums.txt

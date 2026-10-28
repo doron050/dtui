@@ -1,4 +1,4 @@
-.PHONY: all build install test test-coverage vet lint fmt clean
+.PHONY: all build install test test-coverage vet lint fmt clean third-party-licenses
 
 # Leading "v" stripped so local builds report the same shape as release builds.
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null | sed 's/^v//' || echo dev)
@@ -34,6 +34,11 @@ install:
 	     echo "  Then run: source ~/.bashrc  (or open a new terminal)"; \
 	     echo "" ;; \
 	esac
+
+# Regenerate NOTICE inputs under third_party/ after any go.mod change; CI fails
+# when the committed files are stale.
+third-party-licenses:
+	@scripts/third-party-licenses.sh
 
 test:
 	@go test -race ./...
