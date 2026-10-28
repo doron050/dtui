@@ -13,8 +13,6 @@ permissions:
 jobs:
   analysis:
     name: Scorecard analysis
-    # Needs a PAT and cannot publish results on a private repo.
-    if: ${{ !github.event.repository.private }}
     runs-on: ubuntu-latest
     permissions:
       security-events: write
