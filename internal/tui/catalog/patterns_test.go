@@ -121,3 +121,9 @@ func TestLogsPatternScope(t *testing.T) {
 		t.Errorf("logs must compose the pattern scope:\n%s", dql)
 	}
 }
+
+func TestShellSingleQuoteEscapesEmbeddedQuotes(t *testing.T) {
+	if got, want := shellSingleQuote(`it's`), `'it'\''s'`; got != want {
+		t.Errorf("shellSingleQuote = %s, want %s", got, want)
+	}
+}

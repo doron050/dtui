@@ -134,7 +134,7 @@ if (typeof g.dtuiSendInput === 'function') {
   const after = fetched.slice(before);
   console.log('=== requests after ":ctx secondary" ===');
   console.log(after.slice(-4).join('\n'));
-  ctxKeyOk = after.some((u) => u.includes('second.example.com'));
+  ctxKeyOk = after.some((u) => new URL(u).hostname === 'second.example.com');
   console.log(`[:ctx] keyboard switch routed queries to secondary: ${ctxKeyOk}`);
 }
 
@@ -155,7 +155,7 @@ if (typeof g.dtuiNavigate === 'function') {
   const after = fetched.slice(before);
   console.log('=== requests after environment-URL deep link ===');
   console.log(after.slice(-6).join('\n'));
-  ctxNavOk = after.some((u) => u.includes('tenant.example.com'));
+  ctxNavOk = after.some((u) => new URL(u).hostname === 'tenant.example.com');
   console.log(`[context] deep-link URL auto-selected the matching env, queries hit primary: ${ctxNavOk}`);
 } else {
   console.log('!! dtuiNavigate not registered — cannot test context switch');

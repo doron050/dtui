@@ -64,7 +64,7 @@ var patternsSpec = &Spec{
 		if err != nil {
 			return ""
 		}
-		return fmt.Sprintf("dtctl exec analyzer %s --input '%s'", LogPatternAnalyzer, input)
+		return fmt.Sprintf("dtctl exec analyzer %s --input %s", LogPatternAnalyzer, shellSingleQuote(string(input)))
 	},
 	Columns: []Column{
 		{Title: "MATCHES", Width: 8, Right: true, Field: "numberOfMatches"},
@@ -78,6 +78,12 @@ var patternsSpec = &Spec{
 	},
 	EnterTarget: "pattern-logs", // sentinel: logs filtered by the row's pattern
 	Drills:      map[string]string{},
+}
+
+// shellSingleQuote wraps s in single quotes for a POSIX shell, closing and
+// reopening the quotes around any embedded single quote.
+func shellSingleQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // PatternOf extracts the DPL pattern a patterns-view row stands for.
