@@ -1,0 +1,42 @@
+name: pr-title
+
+# Squash merges land the PR title on main, and release-please derives the next
+# version from it. A title that is not a conventional commit is silently ignored
+# by release-please, so it is rejected here instead.
+#
+# pull_request_target only to get a token that can read fork PRs; this workflow
+# never checks out or runs PR code.
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - edited
+      - reopened
+      - synchronize
+
+permissions: {}
+
+jobs:
+  pr-title:
+    name: Conventional PR title
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    steps:
+      - name: Validate the PR title
+        uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6.1.1
+        with:
+          types: |
+            feat
+            fix
+            perf
+            refactor
+            docs
+            test
+            build
+            ci
+            chore
+            revert
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

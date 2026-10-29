@@ -42,11 +42,15 @@ before you invest time. Overriding a gate requires an ADR, not a PR comment.
 - Tests: no HTTP, no TTY, no sleeps, no golden files (see CLAUDE.md "Testing conventions").
 - **Use synthetic identifiers only** in tests, fixtures and docs — never real
   environment names, URLs, entity IDs or tokens.
-- Conventional commits (`feat:`, `fix:`, `docs:`, `test:`, `chore:`, `refactor:`).
 
 ## Pull requests
 
 - Keep PRs focused: one logical change.
+- The PR title must be a [conventional commit](https://www.conventionalcommits.org/)
+  (`feat:`, `fix:`, `perf:`, `refactor:`, `docs:`, `test:`, `build:`, `ci:`, `chore:`,
+  `revert:`; optional scope, `!` for breaking changes). PRs are squash-merged and the
+  title becomes the commit on `main`, which release-please uses to pick the next
+  version. The `pr-title` check enforces this.
 - `make fmt lint test` must pass.
 - Fill in the PR template, including the gate checklist.
 
