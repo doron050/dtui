@@ -1,0 +1,3 @@
+# Golden snapshot files must check out byte-identical on every OS — a CRLF
+# working-tree copy would never match the LF-only rendered output.
+*.golden text eol=lf

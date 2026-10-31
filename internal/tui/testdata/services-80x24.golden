@@ -1,0 +1,24 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                               last 2h
+ services ─────────────────────────────────────────────────────────────────────
+ 2 rows · 1s
+ NAME         REQUESTS         FAILED           ID                          SEEN
+▌TodoContro…  ⣀⣀⣀⣀⣀⣀⣀⡼     12  ⣀⣀⣀⣀⣀⡖⢦⡼      1  SERVICE-C12EEB1CB92F062C     23d
+ tutorial-f…  ⣀⣀⣀⣀⣀⣀⣀⡼     71  ⣀⣀⣀⣀⣀⣀⡼⠉      5  SERVICE-2D0462AE4C4B01F5     23d
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ enter details  d record  l logs  s traces  m metrics  p problems  v events  / …
+ ≡ dtctl query 'timeseries { req = sum(dt.service.request.count, scalar: true),…
