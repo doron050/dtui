@@ -66,6 +66,10 @@ func StrFirst(rec map[string]any, key string) string {
 	return ""
 }
 
+// Now is the clock age/time rendering reads from — a var so tests can pin a
+// fixed instant and get deterministic output.
+var Now = time.Now
+
 // FormatTime renders an ISO timestamp as a short clock time (with the date
 // when it is not from today).
 func FormatTime(iso string) string {
@@ -74,7 +78,7 @@ func FormatTime(iso string) string {
 		return iso
 	}
 	t = t.Local()
-	now := time.Now()
+	now := Now()
 	if t.Year() == now.Year() && t.YearDay() == now.YearDay() {
 		return t.Format("15:04:05")
 	}
@@ -87,7 +91,7 @@ func Age(iso string) string {
 	if err != nil {
 		return ""
 	}
-	return FormatDuration(time.Since(t))
+	return FormatDuration(Now().Sub(t))
 }
 
 // FormatDuration renders a duration compactly ("45s", "34m", "5h", "2d").
@@ -229,6 +233,9 @@ func SparkColumn(title, alias string, width int, unit string) Column {
 	return Column{
 		Title: title,
 		Width: width,
+		// Below graph + a short value the cell truncates the number it exists
+		// to show — shrinking past this makes the column a bare sparkline.
+		Min:   graphW + 4,
 		Class: func(string) string { return "spark" },
 		Value: func(rec map[string]any) string {
 			series := FloatSeries(rec[key])
@@ -237,6 +244,20 @@ func SparkColumn(title, alias string, width int, unit string) Column {
 			}
 			value := FormatUnitShort(series[len(series)-1], unit)
 			return fmt.Sprintf("%s %*s", Spark(series, graphW), width-graphW-1, value)
+		},
+		// Width-aware: the graph shrinks before the value is dropped, so a
+		// squeezed column still shows the number it exists for.
+		ValueW: func(rec map[string]any, w int) string {
+			series := FloatSeries(rec[key])
+			if len(series) == 0 {
+				return ""
+			}
+			value := FormatUnitShort(series[len(series)-1], unit)
+			graph := min(graphW, w-len([]rune(value))-1)
+			if graph < 1 {
+				return value
+			}
+			return fmt.Sprintf("%s %*s", Spark(series, graph), w-graph-1, value)
 		},
 		Sort: func(rec map[string]any) any {
 			if last := SeriesLast(rec, key); !math.IsNaN(last) {
