@@ -1,12 +1,12 @@
  ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                                       last 2h
  traces › trace 00000000… ─────────────────────────────────────────────────────────────────────────────────────────────
  2.45s · 6 spans · ✗ 2 failed                                         │ /api/checkout
-▌✗ POST /api/che… server   storefront-web         ██████████████████… │
- └─ CheckoutCont… server   ● storefront-web       ██████████████████… │  status: failed
-    ├─ SELECT sh… ⛁ db     ● storefront-web       █┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄… │  duration: 2.45s
-    ├─ POST /api… client   ● storefront-web       ██┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄… │  http: POST 500
-    │  └─ POST /… server   ● OrderController      ██┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄… │  url: /api/checkout
-    └─ ✗ POST /v… client   ● storefront-web       ┄┄┄███████████████… │  service: storefront-web
+▌✗ POST /api/che… server   storefront-… ██████████████████     2.45s  │
+ └─ CheckoutCont… server   ● storefron… █████████████████┄     2.44s  │  status: failed
+    ├─ SELECT sh… ⛁ db     ● storefron… █┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄    20.0ms  │  duration: 2.45s
+    ├─ POST /api… client   ● storefron… ██┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄   350.0ms  │  http: POST 500
+    │  └─ POST /… server   ● OrderCont… ██┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄   334.0ms  │  url: /api/checkout
+    └─ ✗ POST /v… client   ● storefron… ┄┄██████████████┄┄     2.03s  │  service: storefront-web
                                                                       │  kind: server
                                                                       │  start: 11:59:39
 

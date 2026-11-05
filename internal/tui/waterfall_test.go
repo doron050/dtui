@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
+
 	"github.com/dynatrace-oss/dtui/internal/tui/catalog"
 )
 
@@ -145,5 +147,28 @@ func TestWaterfallUnanchoredWidensToRelative24h(t *testing.T) {
 	wf.Update(dataMsg{owner: wf, seq: wf.seq, records: nil})
 	if !wf.widened || wf.tf.Absolute() || wf.tf.Dur != 24*time.Hour {
 		t.Errorf("unanchored empty should widen to relative 24h, got %+v", wf.tf)
+	}
+}
+
+// TestWaterfallKeepsDurationWhenNarrow guards the narrow layouts (80 columns,
+// or the body beside the side preview): the service and bar columns shrink
+// before a row overflows, so every span keeps its duration on screen.
+func TestWaterfallKeepsDurationWhenNarrow(t *testing.T) {
+	a := testApp(t, "traces")
+	wf := openCheckoutWaterfall(t, a)
+	durs := []string{"2.45s", "2.44s", "20.0ms", "350.0ms", "334.0ms", "2.03s"}
+	for _, w := range []int{60, 70, 80, 100, 160} {
+		lines := strings.Split(ansi.Strip(wf.renderBody(w, 20)), "\n")[1:]
+		if len(lines) < len(durs) {
+			t.Fatalf("width %d: %d span rows, want %d", w, len(lines), len(durs))
+		}
+		for i, d := range durs {
+			if got := ansi.StringWidth(lines[i]); got > w {
+				t.Errorf("width %d row %d: %d cells wide", w, i, got)
+			}
+			if !strings.HasSuffix(strings.TrimRight(lines[i], " "), d) {
+				t.Errorf("width %d row %d lost its duration %q: %q", w, i, d, lines[i])
+			}
+		}
 	}
 }

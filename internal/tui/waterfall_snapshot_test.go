@@ -8,7 +8,15 @@ import "testing"
 // with the request verdict, a controller subroutine, and its outbound calls.
 func TestSnapshotWaterfall(t *testing.T) {
 	pinSnapshotClock(t)
+	a := testApp(t, "traces")
+	openCheckoutWaterfall(t, a)
+	assertSnapshots(t, "waterfall", a)
+}
 
+// openCheckoutWaterfall seeds the traces table with a failed checkout trace
+// and opens its waterfall with all six spans loaded.
+func openCheckoutWaterfall(t *testing.T, a *app) *waterfallView {
+	t.Helper()
 	const tid = "0000000000000000000000000000e004"
 	root := entrySpan(tid, "00000000000e0004", "POST", "/api/checkout", "storefront-web",
 		"2026-07-15T11:59:39.500000000Z", "2026-07-15T11:59:41.950000000Z", "2450000000", "500", true)
@@ -32,10 +40,9 @@ func TestSnapshotWaterfall(t *testing.T) {
 				"http.response.status_code": "503", "span.status_code": "error"}),
 	}
 
-	a := testApp(t, "traces")
 	seedRows(t, a, []map[string]any{root})
 	press(a, key("enter"))
 	wf := a.top().(*waterfallView)
 	wf.Update(dataMsg{owner: wf, seq: wf.seq, records: spans})
-	assertSnapshots(t, "waterfall", a)
+	return wf
 }

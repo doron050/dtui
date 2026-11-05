@@ -397,8 +397,17 @@ func (v *waterfallView) renderBody(width, height int) string {
 	kindW, svcW := 8, 22
 	// Five separator spaces plus the one-cell cursor gutter.
 	treeW := width - barW - durW - kindW - svcW - 6
-	if treeW < 16 {
-		treeW = 16
+	// A narrow pane gives up service width, then bar width, before the tree
+	// drops below its floor, so the row keeps its duration on screen.
+	const minTree, minSvc, minBar = 16, 12, 10
+	if short := minTree - treeW; short > 0 {
+		give := min(short, svcW-minSvc)
+		svcW -= give
+		short -= give
+		give = min(short, max(barW-minBar, 0))
+		barW -= give
+		short -= give
+		treeW = max(minTree-short, 1)
 	}
 
 	end := v.offset + v.visible()
