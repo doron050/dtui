@@ -1,0 +1,40 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                   last 2h
+ services ─────────────────────────────────────────────────────────────────────────────────────────
+ 2 rows · 1s
+ NAME                             REQUESTS         FAILED           ID                          SEEN
+▌TodoController                   ⣀⣀⣀⣀⣀⣀⣀⡼     12  ⣀⣀⣀⣀⣀⡖⢦⡼      1  SERVICE-C12EEB1CB92F062C     23d
+ tutorial-frontend                ⣀⣀⣀⣀⣀⣀⣀⡼     71  ⣀⣀⣀⣀⣀⣀⡼⠉      5  SERVICE-2D0462AE4C4B01F5     23d
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ TodoController
+  SERVICE  SERVICE-C12EEB1CB92F062C
+
+  id: SERVICE-C12EEB1CB92F062C
+  detection: 1
+  first seen: Jun 21 15:43
+  last seen: 06:11:00
+
+
+ enter details  d record  l logs  s traces  m metrics  p problems  v events  / filter  f facets  J/…
+ ≡ dtctl query 'timeseries { req = sum(dt.service.request.count, scalar: true), faas = sum(dt.servi…

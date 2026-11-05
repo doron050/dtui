@@ -921,9 +921,24 @@ implementation landed on cheaper, less brittle seams.)
   the tests pin the DQL shape with substring checks — catching
   scope-composition regressions cheaply.
 - **View assertions**: `View(w, h)` output is checked for content and
-  classification via `ansi.Strip` + substring matching — no golden files, so
-  styling and layout tweaks don't invalidate tests. Synthetic data only, per
-  the privacy rules.
+  classification via `ansi.Strip` + substring matching — these pin *what* a
+  view shows, not how it looks. Synthetic data only, per the privacy rules.
+- **Layout snapshots** (`snapshot_test.go`): a small, opt-in golden layer pins
+  *how* a view looks — column alignment, truncation, borders, pane splits.
+  `assertSnapshots(t, "<view>", a)` resizes the app through the real
+  `WindowSizeMsg` path and diffs the ANSI-stripped screen against
+  `testdata/<view>-<w>x<h>.golden` at the canonical matrix
+  **80×24, 100×40, 120×40, 160×50** — one size per layout branch (preview
+  hidden / bottom pane / side pane / wide). Regenerate after an intentional
+  visual change with `go test ./internal/tui -run Snapshot -update` and commit
+  the goldens in the same change, so reviewers see the visual delta as a
+  readable diff. Rules for adding one: seeded rows only (shape them like real
+  Grail records, including `__enrich.*` series and `lifetime`), pin
+  `catalog.Now` when any cell renders relative time. Scope stays narrow on
+  purpose: snapshot **main screens and their sanity states only** (the
+  populated table view, not every overlay, picker, or edge state). The point
+  is guarding core functionality against visual breakage — not pinning every
+  pixel, which is the churn the original design rejected goldens for.
 - **Datasource tests**: no HTTP anywhere — the `dataSource.runFn` func seam
   replaces the executor, and API-backed views stub the injected `Source`
   closures. Canned rows are injected via `seedRows`.

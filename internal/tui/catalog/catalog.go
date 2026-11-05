@@ -192,9 +192,15 @@ type Column struct {
 	Title string
 	Field string // record key; ignored when Value is set
 	Width int    // display width; 0 = flex (shares remaining space)
+	Min   int    // floor when shrinking under space pressure; 0 = header text
 	Right bool   // right-align (numeric columns)
 	// Value computes the cell text from the whole record (optional).
 	Value func(rec map[string]any) string
+	// ValueW computes the cell text like Value but given the allocated
+	// display width (optional; takes precedence over Value). For cells
+	// whose content adapts to the space, e.g. a sparkline that shortens
+	// its graph before dropping its value.
+	ValueW func(rec map[string]any, width int) string
 	// Class returns a semantic style class ("error", "warn", "ok", "dim", "")
 	// for the formatted cell value (optional). The view layer maps classes to
 	// concrete styles.
@@ -211,6 +217,15 @@ func (c Column) Text(rec map[string]any) string {
 		return c.Value(rec)
 	}
 	return FormatValue(rec[c.Field])
+}
+
+// TextAt returns the formatted cell value for a record given the display
+// width it will render in (ValueW when set, Text otherwise).
+func (c Column) TextAt(rec map[string]any, width int) string {
+	if c.ValueW != nil {
+		return c.ValueW(rec, width)
+	}
+	return c.Text(rec)
 }
 
 // Lens is one quick server-side slice of a view's dataset — the spans view

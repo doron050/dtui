@@ -149,7 +149,15 @@ No HTTP and no TTY anywhere in tests (see `docs/design/tui.md` "Testing").
 - **Catalog tests**: render each `Spec`'s query against fixture scopes and pin
   the DQL shape with substring checks (catches scope-composition regressions).
 - **View assertions**: check `View(w,h)` output via `ansi.Strip` + substring
-  matching — **no golden files**, so layout tweaks don't churn tests.
+  matching for content.
+- **Layout snapshots** (`internal/tui/snapshot_test.go`): the standard for
+  pinning how a view looks. `assertSnapshots` diffs the stripped screen
+  against `testdata/<view>-<w>x<h>.golden` at the canonical sizes 80×24,
+  100×40, 120×40, 160×50 (one per preview-layout branch). Regenerate with
+  `go test ./internal/tui -run Snapshot -update`; seed deterministic data and
+  pin `catalog.Now` for time-relative cells. Keep coverage narrow: **main
+  screens and their sanity states only** — not every overlay, picker, or
+  edge state — so small feature changes don't churn the suite.
 - **Datasource tests**: replace the executor via the `runFn` seam; API-backed
   views stub the injected `Source` closures; rows via `seedRows`.
 - Use **synthetic identifiers only** — never real tenant/entity IDs, per the

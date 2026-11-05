@@ -1,0 +1,40 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                   last 2h
+ pods ─────────────────────────────────────────────────────────────────────────────────────────────
+ 4 rows · 1s
+ NAMESPACE           NAME        READY   RST  PHASE     CPU             NODE                     AGE
+▌shop                checkout-1    1/1     0  Running   ⣀⣀⣀⡤⠤⠴⠲⠞  160m  ip-10-0-1-1              14d
+ shop                checkout-2    1/1     2  Running   ⣀⣠⠤⠤⠖⠒⠒⠒   93m  ip-10-0-1-2              14d
+ shop                payments-1    1/1     0  Pending                   ip-10-0-1-3              14d
+ back                inventory…    1/1    31  CrashLo…  ⠤⠶⣄⡴⠒⢦⡴⠦  405m  ip-10-0-1-4              14d
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ checkout-1
+  K8S_POD  K8S_POD-checkout-1
+
+  id: K8S_POD-checkout-1
+  phase: Running
+  ready: 1/1
+  restarts: 0
+  namespace: shop
+ … (enter opens the full record)
+ enter details  d record  l logs  s traces  m metrics  p problems  v events  / filter  f facets  J/…
+ ≡ dtctl query 'smartscapeNodes "K8S_POD", from:now() - 2h | parse k8s.object, "JSON:obj" | expand …

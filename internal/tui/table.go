@@ -1129,7 +1129,7 @@ func (v *tableView) renderRow(i int, widths []int, width int) string {
 
 	var cells []string
 	for ci, c := range v.columns() {
-		text := cell(c.Text(rec), widths[ci], c.Right)
+		text := cell(c.TextAt(rec, widths[ci]), widths[ci], c.Right)
 		if !selected && c.Class != nil {
 			if class := c.Class(strings.TrimSpace(text)); class != "" {
 				text = theme.Class(class, text)
@@ -1160,6 +1160,52 @@ func (v *tableView) columnWidths(total int) []int {
 		}
 	}
 	gaps := 2 * (len(cols) - 1)
+
+	colFloor := func(c catalog.Column) int {
+		return min(c.Width, max(max(4, lipgloss.Width(c.Title)), c.Min))
+	}
+
+	// When fixed columns alone won't fit, shrink them proportionally toward a
+	// floor (header text, or a column's declared Min) before flex columns
+	// starve — otherwise the rightmost columns are truncated off the edge
+	// entirely and a flex column floors at 8 cells while a fixed column keeps
+	// its full width.
+	const flexMin = 8
+	budget := total - gaps - flexMin*flexCount
+	if fixed > 0 && fixed > budget {
+		if budget < 0 {
+			budget = 0
+		}
+		scale := float64(budget) / float64(fixed)
+		sum := 0
+		for i, c := range cols {
+			if c.Width == 0 {
+				continue
+			}
+			widths[i] = max(colFloor(c), int(float64(c.Width)*scale))
+			sum += widths[i]
+		}
+		// Floor hits and truncation leave the sum over or under budget:
+		// shave the widest shrinkable column until it fits.
+		for sum > budget {
+			widest := -1
+			for i, c := range cols {
+				if c.Width == 0 {
+					continue
+				}
+				if widths[i] > colFloor(c) && (widest < 0 || widths[i] > widths[widest]) {
+					widest = i
+				}
+			}
+			if widest < 0 {
+				break
+			}
+			widths[widest]--
+			sum--
+		}
+		fixed = sum
+	}
+
 	remaining := total - fixed - gaps
 	if flexCount > 0 {
 		per := remaining / flexCount
