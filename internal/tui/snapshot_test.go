@@ -16,6 +16,10 @@ package tui
 //     (no live data, no timers, catalog.Now pinned);
 //   - every snapshot covers the canonical size matrix in snapshotSizes, so a
 //     new view snapshot is one loop, not a bespoke set of resolutions.
+//
+// This file is the generic harness only. Each view's snapshot test lives in
+// <view>_snapshot_test.go (pods_snapshot_test.go, hosts_snapshot_test.go, …)
+// with fixtures shaped like that view's real Grail records.
 
 import (
 	"flag"
@@ -118,71 +122,23 @@ func lineDiff(want, got string) string {
 	return b.String()
 }
 
+// pinSnapshotClock pins the render clock and zone so relative ages (SEEN,
+// AGE) and wall-clock cells (TIME, first/last seen) read the same on every
+// machine: catalog.Now drives the former, time.Local the latter.
+func pinSnapshotClock(t *testing.T) {
+	t.Helper()
+	now, local := catalog.Now, time.Local
+	catalog.Now = func() time.Time { return snapshotNow }
+	time.Local = time.UTC
+	t.Cleanup(func() { catalog.Now, time.Local = now, local })
+}
+
+// snapshotNow is the pinned render instant; fixtures place their timestamps
+// relative to it.
+var snapshotNow = time.Date(2026, 7, 15, 12, 0, 0, 0, time.UTC)
+
 // screen renders the whole app (header + top view + status bar) stripped of
 // ANSI, at whatever size the last WindowSizeMsg set.
 func screen(a *app) string {
 	return ansi.Strip(a.View())
-}
-
-func TestSnapshotPodsTable(t *testing.T) {
-	// Pin the render clock so AGE cells are deterministic in the golden.
-	catalog.Now = func() time.Time { return time.Date(2026, 7, 15, 12, 0, 0, 0, time.UTC) }
-	t.Cleanup(func() { catalog.Now = time.Now })
-
-	rows := []map[string]any{
-		podRow("checkout-1", "shop", "Running", 0),
-		podRow("checkout-2", "shop", "Running", 2),
-		podRow("payments-1", "shop", "Pending", 0),
-		podRow("inventory-1", "back", "CrashLoopBackOff", 31),
-	}
-	// Shape the rows like real Grail output: node name + the enrichment CPU
-	// series the table fetches page-level (SparkColumn reads __enrich.cpu).
-	cpus := [][]any{
-		{120.0, 130.0, 125.0, 140.0, 135.0, 150.0, 145.0, 160.0},
-		{80.0, 85.0, 90.0, 88.0, 92.0, 95.0, 91.0, 93.0},
-		{nil, nil, nil, nil, nil, nil, nil, nil},
-		{400.0, 420.0, 380.0, 410.0, 430.0, 390.0, 415.0, 405.0},
-	}
-	for i, r := range rows {
-		r["node"] = fmt.Sprintf("ip-10-0-1-%d", i+1)
-		r["__enrich.cpu"] = cpus[i]
-	}
-
-	a := testApp(t, "pods")
-	seedRows(t, a, rows)
-	assertSnapshots(t, "pods", a)
-
-	// The preview toggle is orthogonal to size: pin the bare-table render too.
-	a = testApp(t, "pods")
-	disablePreview(a)
-	seedRows(t, a, rows)
-	assertSnapshot(t, "pods-120x40-nopeek", screen(a))
-}
-
-// Services mirrors what a live tenant returns: Smartscape id/name + lifetime,
-// plus the __enrich.req / __enrich.fail series behind the spark columns.
-func TestSnapshotServicesTable(t *testing.T) {
-	catalog.Now = func() time.Time { return time.Date(2026, 7, 15, 12, 0, 0, 0, time.UTC) }
-	t.Cleanup(func() { catalog.Now = time.Now })
-
-	rows := []map[string]any{
-		{
-			"id": "SERVICE-C12EEB1CB92F062C", "name": "TodoController",
-			"lifetime":                     map[string]any{"start": "2026-06-21T15:43:00.000000000Z", "end": "2026-07-15T06:11:00.000000000Z"},
-			"dt.service_detection.version": "1",
-			"__enrich.req":                 []any{1.0, 1.0, 2.0, 1.0, 1.0, 1.0, 3.0, 12.0},
-			"__enrich.fail":                []any{0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0},
-		},
-		{
-			"id": "SERVICE-2D0462AE4C4B01F5", "name": "tutorial-frontend",
-			"lifetime":                     map[string]any{"start": "2026-06-21T15:43:00.000000000Z", "end": "2026-07-15T06:11:00.000000000Z"},
-			"dt.service_detection.version": "1",
-			"__enrich.req":                 []any{2.0, 3.0, 2.0, 4.0, 3.0, 5.0, 4.0, 71.0},
-			"__enrich.fail":                []any{0.0, 1.0, 0.0, 0.0, 2.0, 0.0, 5.0, 5.0},
-		},
-	}
-
-	a := testApp(t, "services")
-	seedRows(t, a, rows)
-	assertSnapshots(t, "services", a)
 }

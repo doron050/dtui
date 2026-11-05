@@ -1,0 +1,24 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                               last 2h
+ hosts ────────────────────────────────────────────────────────────────────────
+ 3 rows · 1s
+ NAME      OS    CPUS  CPU           MEM           MEMORY  IP      SKU      SEEN
+▌ip-10-0…  LIN…     4  ⠤⣄⣀⣀⣀⣠⢶ 5.2%  ⣀⣀⣀⣀⣸⢧ 15.8%  15.5 …  203.0…            29d
+ ip-10-0…  LIN…     8  ⣀⣠⠖⠛⠲⠤ 62.7%  ⣀⣠⠴⠚⠓⠒ 54.4%  31.0 …  10.0.…            29d
+ build-a…  WIN…    16                              64.0 …  192.1…             2d
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ enter details  d record  l logs  s traces  m metrics  p problems  v events  / …
+ ≡ dtctl query 'smartscapeNodes "HOST" | fieldsRemove k8s.object, aws.object, a…
