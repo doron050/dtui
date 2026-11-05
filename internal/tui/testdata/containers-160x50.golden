@@ -1,0 +1,50 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                                                                               last 2h
+ containers ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 4 rows · 1s                                                                                                  │ activegate
+ NAME        CPU             MEM               IMAGE                         POD                         SEEN │  CONTAINER  CONTAINER-0000000000000E01
+▌activegate  ⢤⣠⠶⢤⣀⡖⠲⢤   40m  ⣀⡤⠤⠤⠴⠒⠒ 600.8MiB  activegate:1.349.62-raw       dynakube-activegate-0        29d │
+ coredns     ⣀⣠⠶⣄⣀⣀⡴⢦    2m  ⣀⣀⣀⡖⣆⣀⣀⡼ 21.0MiB  mirrored-coredns-coredns:1.…  coredns-5c6d7e8f9a-p9r8s     29d │  id: CONTAINER-0000000000000E01
+ order-ser…  ⣀⣠⠴⠒⠒⠦⠤⠤  205m  ⣀⣠⠖⠒⠲⠤⠤ 448.2MiB  order-service:2.14.0          order-service-7d9f8b6c5d-…   29d │  image: activegate:1.349.62-raw
+ otel-coll…  ⢤⣀⡤⠤⠖⢦⣀⣠   15m  ⣀⣠⠤⠴⠲⠤⠴⠚ 88.7MiB  opentelemetry-collector-con…  otel-collector-6b7c8d9e0f…   29d │  pod: dynakube-activegate-0
+                                                                                                              │  namespace: dynatrace
+                                                                                                              │  node: ip-10-0-1-17
+                                                                                                              │  cluster: demo-cluster
+                                                                                                              │  runtime: containerd
+                                                                                                              │  first seen: Jun 15 15:41
+                                                                                                              │  last seen: 11:55:00
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ enter details  d record  l logs  s traces  m metrics  p problems  v events  / filter  f facets  J/K sort  : views  t timeframe  S segments  r refresh  ? help …
+ ≡ dtctl query 'smartscapeNodes "CONTAINER" | fieldsRemove references | sort name asc | limit 500'

@@ -1,0 +1,24 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                               last 2h
+ hosts › ip-10-0-1-17 ─────────────────────────────────────────────────────────
+ ip-10-0-1-17   HOST   HOST-0000000000000B01
+ no active problems (24h)  ·  cpu ⠤⣄⣀⣀⣀⣀⣠⢶  ·  mem ⣀⣀⣀⣀⣀⣀⡖⢦  ·  seen 29d
+  1 details   2 processes   3 metrics   4 logs   5 traces   6 events   7 proble…
+────────────────────────────────────────────────────────────────────────────────
+ id              HOST-0000000000000B01
+ os              LINUX · Ubuntu 22.04.3 LTS (Jammy Jellyfish) (kernel 6.2.0-1017
+ cpu             4 logical / 2 physical
+ memory          15.5 GiB
+ ip              203.0.113.10,10.0.1.17
+ cloud           aws us-east-1b
+ instance        i-0123456789abcdef0
+ hypervisor      AWS_NITRO
+ first seen      Jun 15 15:39
+ last seen       11:55:00
+ primary tags    environment:production team:checkout
+
+▍ vitals (last 2h)
+▌ cpu usage       ⠤⠤⣄⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⡴⠒⢦  █░░░░░░░░░░░        5.20%   avg 5.44% · max…
+ memory usage    ⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⡴⠒⠦⣄  ██░░░░░░░░░░       15.80%   avg 15.88% · max
+
+ 1-9/tab tabs  j/k fields  enter chart cpu usage  f facet list by field  y yank…
+ ≡ dtctl query 'smartscapeNodes "HOST" | filter id == toSmartscapeId("HOST-0000…

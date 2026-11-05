@@ -1,0 +1,40 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                                       last 2h
+ traces ───────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 5 rows · 1s                                                          │ /api/orders
+  roots    errors    exceptions    server    client    db    rpc    … │
+ START        NAME      KIND     SERVICE             STATUS  DURATION │  duration: 341.0ms
+▌11:59:58     /api/or…  server   OrderController              341.0ms │  http: POST 201
+ 11:59:51     /api/or…  server   OrderController                8.1ms │  url: /api/orders
+ 11:59:44     /api/ca…  server   storefront-web                 871µs │  code: com.example.shop.web.OrderController
+ 11:59:39     /api/ch…  server   storefront-web      failed     2.45s │  service: OrderController
+ 11:59:30     /actuat…  server   OrderController                2.1ms │  kind: server
+                                                                      │  start: 11:59:58
+                                                                      │
+                                                                      │  trace: 00000000… (enter opens)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ tab lens  enter waterfall  l trace-logs  / filter  f facets  J/K sort  : views  t timeframe  S segments  r refresh  ? …
+ ≡ dtctl query 'fetch spans, from:now() - 2h | fieldsAdd dt.system.bucket | filter isNull(span.parent_id) | sort start_…

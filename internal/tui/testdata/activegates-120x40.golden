@@ -1,0 +1,40 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                                       last 2h
+ fleet·activegates ────────────────────────────────────────────────────────────────────────────────────────────────────
+ 2 rows · 1s                                                          │ dynakube-activegate-0
+  oneagents    activegates    modules                                 │  ACTIVEGATE  ACTIVEGATE-0000000000000F01
+ NAME      VERSION    GROUP     PURPOSE  MODULES    ZONE   OS    SEEN │
+▌dynakub…  1.349.62…  default            DEBUGGIN…  defa…  LIN…   29d │  id: ACTIVEGATE-0000000000000F01
+ ag-eu-c…  1.347.40…  eu-cent…  routing  AGENT_RO…  defa…  LIN…   29d │  version: 1.349.62.20260627-101708
+                                                                      │  group: default
+                                                                      │  modules: DEBUGGING,KUBERNETES,ODIN_COLLECTOR,…
+                                                                      │  network zone: default
+                                                                      │  os: OS_TYPE_LINUX
+                                                                      │  arch: amd64
+                                                                      │  started: Jul 14 15:36
+                                                                      │  containerized: yes
+                                                                      │  first seen: Jun 15 15:38
+                                                                      │  last seen: 11:57:00
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ tab lens  enter details  d record  l agentlogs  v events  / filter  f facets  J/K sort  : views  t timeframe  S segmen…
+ ✓ lens: activegates — ActiveGates — the tenant's data-collection gateways

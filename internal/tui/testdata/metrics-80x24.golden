@@ -1,0 +1,24 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                               last 2h
+ metrics ──────────────────────────────────────────────────────────────────────
+ 9 rows · 1s
+ METRIC KEY                                 SERIES  RELATES TO
+▌dt.billing.full_stack_monitoring.usage          1
+ dt.host.cpu.usage                               3  HOST
+ dt.host.disk.used.percent                       9  DISK HOST
+ dt.host.memory.usage                            3  HOST
+ dt.process.cpu.usage                           23  PROCESS
+ dt.service.request.count                       18  SERVICE
+ dt.service.request.response_time               18  SERVICE
+ dt.sfm.server.metrics.ingested                  2
+ jvm.memory.used                                12  CONTAINER PROCESS
+
+
+
+
+
+
+
+
+
+ enter chart  / filter  f facets  J/K sort  : views  t timeframe  S segments  r…
+ ≡ dtctl query 'metrics from:now() - 2h | summarize series = count(), types = c…
