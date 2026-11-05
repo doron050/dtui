@@ -1,9 +1,9 @@
  ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                                                                               last 2h
  services ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- 2 rows · 1s                                                                                                  │ TodoController
- NAME                                      REQUESTS         FAILED           ID                          SEEN │  SERVICE  SERVICE-C12EEB1CB92F062C
-▌TodoController                            ⣀⣀⣀⣀⣀⣀⣀⡼     12  ⣀⣀⣀⣀⣀⡖⢦⡼      1  SERVICE-C12EEB1CB92F062C     23d │
- tutorial-frontend                         ⣀⣀⣀⣀⣀⣀⣀⡼     71  ⣀⣀⣀⣀⣀⣀⡼⠉      5  SERVICE-2D0462AE4C4B01F5     23d │  id: SERVICE-C12EEB1CB92F062C
+ 2 rows · 1s                                                                                                  │ OrderController
+ NAME                                      REQUESTS         FAILED           ID                          SEEN │  SERVICE  SERVICE-0000000000000A01
+▌OrderController                           ⣀⣀⣀⣀⣀⣀⣀⡼     12  ⣀⣀⣀⣀⣀⡖⢦⡼      1  SERVICE-0000000000000A01     23d │
+ storefront-web                            ⣀⣀⣀⣀⣀⣀⣀⡼     71  ⣀⣀⣀⣀⣀⣀⡼⠉      5  SERVICE-0000000000000A02     23d │  id: SERVICE-0000000000000A01
                                                                                                               │  detection: 1
                                                                                                               │  first seen: Jun 21 15:43
                                                                                                               │  last seen: 06:11:00

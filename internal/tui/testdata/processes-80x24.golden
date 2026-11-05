@@ -1,0 +1,24 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                               last 2h
+ processes ────────────────────────────────────────────────────────────────────
+ 6 rows · 1s
+ NAME      CPU           MEM           TECH     CONT  HOST                  SEEN
+▌CoreDNS…  ⣀⣀⣀⣀⣠⢤⣀ 0.1%  ⣀⣀⣀⣀⣀⣀⣀ 0.3%  go       ●     ip-10-0-1-17           29d
+ Linux S…  ⣀⡶⣄⣀⣀⣀⣀ 0.1%  ⣠⠞⠉⠉⠉⠉⠉ 1.1%  linux_…        ip-10-0-1-17           29d
+ OneAgen…  ⣀⡴⣆⣀⣀⣰⣆⣀  0%  ⣀⣀⣀⣀⣀⣀⣀ 0.4%  dynatr…  ●     ip-10-0-1-17            2d
+ Short-l…  ⣀⣀⡶⣄⣀⣀⣀⣀  0%  ⣀⣀⣀⣀⣀⣀⣀⣀  0%                 ip-10-0-1-17           29d
+ SpringB…  ⠤⣄⡤⠤⣄⡤⠶ 0.2%  ⣀⣀⣀⣀⣀⣀⣀ 1.8%  java     ●     ip-10-0-1-17           29d
+ nginx     ⣰⢦⣠⢤⣀⣰⣆⣀  0%  ⣀⣀⣀⣀⣀⣀⣀ 0.1%  nginx          ip-10-0-1-17           29d
+
+
+
+
+
+
+
+
+
+
+
+
+ enter details  d record  l logs  m metrics  p problems  v events  / filter  f …
+ ≡ dtctl query 'smartscapeNodes "PROCESS" | fieldsRemove references | sort name…

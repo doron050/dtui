@@ -1,0 +1,40 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                                       last 2h
+ hosts ────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 3 rows · 1s                                                          │ ip-10-0-1-17
+ NAME      OS    CPUS  CPU           MEM           MEMORY  IP    SKU  │  HOST  HOST-0000000000000B01
+▌ip-10-0…  LIN…     4  ⠤⣄⣀⣀⣀⣠⢶ 5.2%  ⣀⣀⣀⣀⣸⢧ 15.8%  15.5 …  203…     … │
+ ip-10-0…  LIN…     8  ⣀⣠⠖⠛⠲⠤ 62.7%  ⣀⣠⠴⠚⠓⠒ 54.4%  31.0 …  10.…     … │  id: HOST-0000000000000B01
+ build-a…  WIN…    16                              64.0 …  192…     … │  os: LINUX · Ubuntu 22.04.3 LTS (Jammy Jellyfi…
+                                                                      │  cpu: 4 logical / 2 physical
+                                                                      │  memory: 15.5 GiB
+                                                                      │  ip: 203.0.113.10,10.0.1.17
+                                                                      │  public ip: 203.0.113.10
+                                                                      │  cloud: aws us-east-1b
+                                                                      │  instance: i-0123456789abcdef0
+                                                                      │  hypervisor: AWS_NITRO
+                                                                      │  first seen: Jun 15 15:39
+                                                                      │  last seen: 11:55:00
+                                                                      │  environm production
+                                                                      │  team     checkout
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ enter details  d record  l logs  s traces  m metrics  p problems  v events  / filter  f facets  J/K sort  : views  t t…
+ ≡ dtctl query 'smartscapeNodes "HOST" | fieldsRemove k8s.object, aws.object, azure.object, references | sort name asc …
