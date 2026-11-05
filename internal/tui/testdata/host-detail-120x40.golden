@@ -9,6 +9,7 @@
  cpu             4 logical / 2 physical
  memory          15.5 GiB
  ip              203.0.113.10,10.0.1.17
+ public ip       203.0.113.10
  cloud           aws us-east-1b
  instance        i-0123456789abcdef0
  hypervisor      AWS_NITRO
@@ -17,8 +18,11 @@
  primary tags    environment:production team:checkout
 
 ▍ vitals (last 2h)
-▌ cpu usage       ⠤⠤⣄⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⡴⠒⢦  █░░░░░░░░░░░        5.20%   avg 5.44% · max 6.90%
- memory usage    ⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⡴⠒⠦⣄  ██░░░░░░░░░░       15.80%   avg 15.88% · max 16.40%
+▌ cpu usage            ⠤⠤⣄⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⡴⠒⢦  █░░░░░░░░░░░        5.20%   avg 5.44% · max 6.90%
+ memory usage         ⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⡴⠒⠦⣄  ██░░░░░░░░░░       15.80%   avg 15.88% · max 16.40%
+ disk used (worst)    ⣀⣀⡴⠋⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉  ██████░░░░░░       52.80%   avg 52.78% · max 52.80%
+ network received     ⣀⣀⡤⠴⠒⠒⢦⣀⣀⣠⠤⠤⢤⡤⠖⠒                 30.6 KiB/s   avg 26.5 KiB/s · max 31.2 KiB/s
+ network transmitted  ⣀⣀⣠⠴⠒⠒⢦⣀⣀⣀⣀⣤⣀⣠⠤⠖                 96.4 KiB/s   avg 90.9 KiB/s · max 100.3 KiB/s
 
 ▍ properties
  host.name                         ip-10-0-1-17
@@ -31,10 +35,6 @@
     end: "2026-07-15T11:55:00.000000000Z"
     start: "2026-06-15T15:39:00.000000000Z"
  logical_cores                     4
- memory                            16,612,761,600
- name                              ip-10-0-1-17
- type                              HOST
-
 
  1-9/tab tabs  j/k fields  enter chart cpu usage  f facet list by field  y yank value  / search  : views  t timeframe  …
  ≡ dtctl query 'smartscapeNodes "HOST" | filter id == toSmartscapeId("HOST-0000000000000B01") | fieldsAdd references | …
