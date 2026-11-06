@@ -1,0 +1,50 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                                                                               last 2h
+ workloads ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 6 rows · 1s                                                                                                  │ cart-api
+ NAMESPACE             NAME                                       KIND          READY  CPU                AGE │  K8S_DEPLOYMENT  K8S_DEPLOYMENT-0000000000000E01
+▌checkout              cart-api                                   deployment      2/2  ⣀⣀⣀⣀⣀⣀⣀⣸   783m    75d │
+ checkout              payment-service                            deployment      1/2  ⣀⣀⣀⣀⣀⣀⣀⣸    96m     2h │  id: K8S_DEPLOYMENT-0000000000000E01
+ checkout              orders-postgres                            statefulset     1/1  ⠴⣶⠶⣆⡴⣶⠶⣶    13m    25d │  ready: 2/2
+ dynatrace             dynatrace-oneagent                         daemonset       6/6  ⠴⣶⠶⣆⡴⣶⠶⣶   230m   114d │  kind: deployment
+ dynatrace             dynatrace-operator                         deployment      1/1                    114d │  namespace: checkout
+ kube-system           kube-proxy                                 daemonset       6/6                    432d │  created: Apr 30 16:06
+                                                                                                              │  tags:k8s.labels
+                                                                                                              │   app.kubernetes.io/component: cart-api
+                                                                                                              │   app.kubernetes.io/instance: cart-api
+                                                                                                              │   app.kubernetes.io/name: cart-api
+                                                                                                              │   app.kubernetes.io/part-of: storefront
+                                                                                                              │   app.kubernetes.io/version: 2.14.1
+                                                                                                              │   helm.sh/chart: cart-api-2.14.1
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ enter pods  d details  l logs  s traces  m metrics  p problems  v events  / filter  f facets  J/K sort  : views  t timeframe  S segments  r refresh  ? help  q…
+ ≡ dtctl query 'smartscapeNodes "K8S_DEPLOYMENT", "K8S_STATEFULSET", "K8S_DAEMONSET" | parse k8s.object, "JSON:obj" | fieldsAdd ready = coalesce(obj[status][re…

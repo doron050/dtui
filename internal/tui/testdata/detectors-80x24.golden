@@ -1,0 +1,24 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                               last 2h
+ detectors ────────────────────────────────────────────────────────────────────
+ 3 rows · 1s
+ TITLE     ENABLED  ANALYZER               EVENT TYPE      SOURCE      DESCRIP…
+▌Ingest …  true     StaticThreshold        CUSTOM_ALERT    Custom      Fires w…
+ Kafka c…  true     AutoAdaptiveThreshold  CUSTOM_ALERT    Clouds      Consume…
+ Checkou…  false    SeasonalBaseline       PERFORMANCE_E…  Custom      Disable…
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ enter inspect  / filter  J/K sort  : views  t timeframe  S segments  r refresh…
+ ≡ dtctl get anomaly-detectors

@@ -1,0 +1,50 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                                                                               last 2h
+ clusters ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 4 rows · 1s                                                                                                  │ demo-aks-westeu
+ NAME                                                               DISTRIBUTION  VERSION                SEEN │  K8S_CLUSTER  K8S_CLUSTER-0000000000000E31
+▌demo-aks-westeu                                                    AKS           v1.32.6                432d │
+ demo-eks-useast1                                                   EKS           v1.33.5-eks-113cf36     77d │  id: K8S_CLUSTER-0000000000000E31
+ demo-eks-uswest2                                                   EKS           v1.33.5-eks-113cf36     79d │  first seen: May 08 13:41
+ demo-gke-europe-west3                                              GKE           v1.33.4-gke.1245000     15d │  last seen: 11:47:00
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ enter nodes  d details  l logs  s traces  p problems  v events  / filter  f facets  J/K sort  : views  t timeframe  S segments  r refresh  ? help  q quit
+ ≡ dtctl query 'smartscapeNodes "K8S_CLUSTER" | fields id, name, type, distribution = k8s.cluster.distribution, version = k8s.cluster.version, lifetime | sort …

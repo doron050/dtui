@@ -1,0 +1,40 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                   last 2h
+ databases ────────────────────────────────────────────────────────────────────────────────────────
+ 3 rows · 1s
+ NAME                                                     SYSTEM      VERSION  ACTIVE CONN      SEEN
+▌orders-db                                                postgresql           ⣀⣀⣠⠤⣄⣀⣰⢲     6    40d
+ orders-db-replica-1                                      postgresql           ⣀⣸⢧⣀⣸⢧⣀⣀     1    40d
+ inventory-pg-flex                                        postgresql                             77d
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ orders-db
+  DB_INSTANCE_POSTGRES  DB_INSTANCE_POSTGRES-0000000000000A81
+
+  id: DB_INSTANCE_POSTGRES-0000000000000A81
+  system: postgresql
+  first seen: Jun 05 06:18
+  last seen: 11:59:00
+
+
+ enter details  d record  m metrics  p problems  v events  / filter  f facets  J/K sort  : views  t…
+ ≡ dtctl query 'smartscapeNodes "DB_INSTANCE_POSTGRES" | fieldsRemove references | sort name asc | …

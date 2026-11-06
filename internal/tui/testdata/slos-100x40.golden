@@ -1,0 +1,40 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                   last 2h
+ slos ─────────────────────────────────────────────────────────────────────────────────────────────
+ 3 rows · 1s
+ NAME        STATUS        SLI   TARGET   BUDGET  WINDOW    TAGS                            MODIFIED
+▌checkout …  SUCCESS    99.97%   99.90%   70.00%  7d        team:checkout,tier:1,env:prod…       14d
+ payments …  FAILURE    99.12%   99.95%  -1660.…  1d        team:payments,tier:1                 26h
+ search er…  WARNING    99.53%   99.50%    6.00%  28d       team:search                          15d
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ checkout availability
+
+  status: SUCCESS
+
+
+
+
+
+
+ enter inspect  / filter  J/K sort  : views  t timeframe  S segments  r refresh  ? help  q quit
+ ≡ dtctl get slos

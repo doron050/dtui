@@ -1,0 +1,50 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                                                                               last 2h
+ userevents ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 5 rows · 1s                                                                                                  │ /api/checkout/submit
+  all    errors    actions    views    requests                                                               │
+ TIME          KIND          DETAIL                                        VIEW                      DURATION │  kind: request
+▌11:59:38      request       /api/checkout/submit                          /checkout                  117.9ms │  response: POST 200
+ 11:59:38      request       /api/checkout/quote                           /checkout                  133.1ms │  view: /checkout
+ 11:59:37      error         TypeError: Cannot read properties of undefi…  /checkout                      0µs │  app: storefront
+ 11:59:37      user_action   click on "Place order"                        /checkout                    1.81s │  duration: 117.9ms
+ 11:59:30      view_summary  /cart                                         /cart                        2.84s │  start: 11:59:38
+                                                                                                              │
+                                                                                                              │  session: 73402155… (u opens)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ tab lens  enter inspect  s trace  p problems  u session  / filter  f facets  J/K sort  : views  t timeframe  S segments  r refresh  ? help  q quit
+ ≡ dtctl query 'fetch user.events, from:now() - 2h | fieldsAdd dt.system.bucket | sort start_time desc | limit 300'

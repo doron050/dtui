@@ -1,0 +1,40 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                   last 2h
+ workloads ────────────────────────────────────────────────────────────────────────────────────────
+ 6 rows · 1s
+ NAMESPACE             NAME                              KIND          READY  CPU                AGE
+▌checkout              cart-api                          deployment      2/2  ⣀⣀⣀⣀⣀⣀⣀⣸   783m    75d
+ checkout              payment-service                   deployment      1/2  ⣀⣀⣀⣀⣀⣀⣀⣸    96m     2h
+ checkout              orders-postgres                   statefulset     1/1  ⠴⣶⠶⣆⡴⣶⠶⣶    13m    25d
+ dynatrace             dynatrace-oneagent                daemonset       6/6  ⠴⣶⠶⣆⡴⣶⠶⣶   230m   114d
+ dynatrace             dynatrace-operator                deployment      1/1                    114d
+ kube-system           kube-proxy                        daemonset       6/6                    432d
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ cart-api
+  K8S_DEPLOYMENT  K8S_DEPLOYMENT-0000000000000E01
+
+  id: K8S_DEPLOYMENT-0000000000000E01
+  ready: 2/2
+  kind: deployment
+  namespace: checkout
+  created: Apr 30 16:06
+ … (enter opens the full record)
+ enter pods  d details  l logs  s traces  m metrics  p problems  v events  / filter  f facets  J/K …
+ ≡ dtctl query 'smartscapeNodes "K8S_DEPLOYMENT", "K8S_STATEFULSET", "K8S_DAEMONSET" | parse k8s.ob…

@@ -1,0 +1,50 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                                                                               last 2h
+ synthetic ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 4 rows · 1s                                                                                                  │ synthetic
+  all    browser    http                                                                                      │
+ NAME                      TYPE     AVAILABILITY    TAGS                  ID                             SEEN │
+▌api health /v1/status     http     ⣀⣀⣀⣀⣀⣀⣀⣀  100%                        HTTP_CHECK-0000000000000AA1     31d │
+ checkout journey (Frank…  browser  ⠉⠉⠉⠹⣴⠋⠉⠉  100%  team:checkout         SYNTHETIC_TEST-000000000000…   525d │
+ login endpoint            http     ⣀⣀⣀⣀⣀⣀⣀⣀  100%  env:prod              HTTP_CHECK-0000000000000AA3    713d │
+ search and book a trip    browser  ⣀⣀⣀⣀⣀⣀⣀⣀  100%  env:prod,team:travel  SYNTHETIC_TEST-000000000000…  1364d │
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ tab lens  enter executions  / filter  f facets  J/K sort  : views  t timeframe  S segments  r refresh  ? help  q quit
+ ≡ dtctl query 'fetch dt.entity.synthetic_test | fieldsAdd lifetime, tags | fieldsAdd monitor.type = "browser" | append [fetch dt.entity.http_check | fieldsAdd…

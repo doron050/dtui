@@ -1,0 +1,24 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                               last 2h
+ clusters ─────────────────────────────────────────────────────────────────────
+ 4 rows · 1s
+ NAME                                  DISTRIBUTION  VERSION                SEEN
+▌demo-aks-westeu                       AKS           v1.32.6                432d
+ demo-eks-useast1                      EKS           v1.33.5-eks-113cf36     77d
+ demo-eks-uswest2                      EKS           v1.33.5-eks-113cf36     79d
+ demo-gke-europe-west3                 GKE           v1.33.4-gke.1245000     15d
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ enter nodes  d details  l logs  s traces  p problems  v events  / filter  f fa…
+ ≡ dtctl query 'smartscapeNodes "K8S_CLUSTER" | fields id, name, type, distribu…

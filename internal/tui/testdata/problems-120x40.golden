@@ -1,0 +1,40 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                                       last 2h
+ problems ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 5 rows · 1s                                                          │ P-26071546 Ingest volume above forecast for log…
+ ID       STATUS  CATEGORY        TITLE     AFFECTED             AGE  │
+▌P-2607…  ACTIVE  CUSTOM_ALERT    Ingest …  demo-environment     8m   │  status: ACTIVE
+ P-2607…  ACTIVE  AVAILABILITY    Kuberne…  aks-system-31337-v…  18m  │  category: CUSTOM_ALERT
+ P-2607…  CLOSED  CUSTOM_ALERT    Synthet…  demo-environment     19m  │  active: 8m (since 11:52:00)
+ P-2607…  ACTIVE  ERROR           Failure…  OrderController +2   40m  │  affected: demo-environment
+ P-2607…  ACTIVE  RESOURCE_CONT…  Memory …  ip-10-0-4-30.ec2.i…  1h   │
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ enter inspect  l logs  s traces  m metrics  v events  / filter  f facets  J/K sort  : views  t timeframe  S segments  …
+ ≡ dtctl query 'fetch dt.davis.problems, from:now() - 2h | fieldsAdd dt.system.bucket | filter not(dt.davis.is_duplicat…

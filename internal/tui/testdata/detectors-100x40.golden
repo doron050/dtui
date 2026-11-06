@@ -1,0 +1,40 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                   last 2h
+ detectors ────────────────────────────────────────────────────────────────────────────────────────
+ 3 rows · 1s
+ TITLE            ENABLED  ANALYZER                  EVENT TYPE        SOURCE        DESCRIPTION
+▌Ingest volume …  true     StaticThreshold           CUSTOM_ALERT      Custom        Fires when hou…
+ Kafka consumer…  true     AutoAdaptiveThreshold     CUSTOM_ALERT      Clouds        Consumer group…
+ Checkout p95 r…  false    SeasonalBaseline          PERFORMANCE_EVE…  Custom        Disabled durin…
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ Ingest volume above forecast
+
+
+
+
+
+
+
+
+ enter inspect  / filter  J/K sort  : views  t timeframe  S segments  r refresh  ? help  q quit
+ ≡ dtctl get anomaly-detectors

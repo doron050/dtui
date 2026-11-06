@@ -1,20 +1,20 @@
  ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                                       last 2h
  pods ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- 4 rows · 1s                                                          │ checkout-1
+ 5 rows · 1s                                                          │ checkout-1
  NAMESPACE  NAME      READY   RST  PHASE  CPU           NODE      AGE │  K8S_POD  K8S_POD-checkout-1
 ▌shop       checkou…    1/1     0  Runn…  ⣀⣀⣠⠤⠴⠲⠞ 160m  ip-10-…   14d │
  shop       checkou…    1/1     2  Runn…  ⣀⣠⠤⠤⠖⠒⠒⠒ 93m  ip-10-…   14d │  id: K8S_POD-checkout-1
  shop       payment…    1/1     0  Pend…                ip-10-…   14d │  phase: Running
  back       invento…    1/1    31  Cras…  ⠤⢶⣠⠖⢲⡤⠤ 405m  ip-10-…   14d │  ready: 1/1
-                                                                      │  restarts: 0
+ back       report-…    0/2     0  Fail…  ⣀⣀⣀⣀⣀⡼ 8.70m  ip-10-…   14d │  restarts: 0
+                                                                      │  workload: deployment checkout
                                                                       │  namespace: shop
                                                                       │  node: ip-10-0-1-1
                                                                       │  created: Jul 01 10:00
-
-
-
-
-
+                                                                      │  tags:k8s.labels
+                                                                      │   app.kubernetes.io/name: checkout
+                                                                      │   app.kubernetes.io/part-of: shop
+                                                                      │   topology.kubernetes.io/zone: us-east-1a
 
 
 

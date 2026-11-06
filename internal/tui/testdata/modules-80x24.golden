@@ -1,0 +1,24 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                               last 2h
+ modules ──────────────────────────────────────────────────────────────────────
+ 5 rows · 1s
+ HOST      NAMESPACE  MODULE    TECH  HEALTH  VERSION    INJECT  MODULE ID  SEEN
+▌ip-10-0…             Apache …  java  Criti…  1.325.47…  full    8f2c1e0a…   10m
+ ip-10-0…             Apache …  java  Criti…  1.325.47…  full    8f2c1e0a…   10m
+ aks-use…  checkout   SpringB…  java  Healt…  1.327.12…  runti…  1a2b3c4d…   10m
+ aks-use…  checkout   node st…  nod…  Healt…  1.327.12…  runti…  1a2b3c4d…   11m
+ win-bui…             IIS app…  dot…  Warni…  1.321.30…  full    9d8c7b6a…   18m
+
+
+
+
+
+
+
+
+
+
+
+
+
+ enter inspect  l agentlogs  v events  / filter  f facets  J/K sort  : views  t…
+ ≡ dtctl query 'fetch events, from:now() - 30m | filter event.kind == "FLEET_EV…

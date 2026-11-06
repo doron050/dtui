@@ -1,0 +1,40 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                   last 2h
+ nodes ────────────────────────────────────────────────────────────────────────────────────────────
+ 4 rows · 1s
+ NAME                                INSTANCE     ZONE        CPUS   PODS  VERSION              SEEN
+▌aks-system-31337-vmss000004         Standard_D…  westeurop…     4     11  v1.32.6                2d
+ aks-system-31337-vmss000005         Standard_D…  westeurop…     4     11  v1.32.6                2d
+ aks-user-27182-vmss00000a           Standard_D…  westeurop…     4     23  v1.32.6               44h
+ aks-user-27182-vmss00000b           Standard_D…  westeurop…     4     19  v1.32.6               15d
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ aks-system-31337-vmss000004
+  K8S_NODE  K8S_NODE-0000000000000E21
+
+  id: K8S_NODE-0000000000000E21
+  kubelet: v1.32.6
+  os: Ubuntu 22.04.5 LTS
+  capacity: 4 cpu
+  instance: Standard_D4ds_v5
+ … (enter opens the full record)
+ enter pods  d details  l logs  s traces  p problems  v events  / filter  f facets  J/K sort  : vie…
+ ≡ dtctl query 'smartscapeNodes "K8S_NODE" | parse k8s.object, "JSON:obj" | fields id, name, type, …

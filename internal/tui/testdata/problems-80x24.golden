@@ -1,0 +1,24 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                               last 2h
+ problems ─────────────────────────────────────────────────────────────────────
+ 5 rows · 1s
+ ID         STATUS  CATEGORY            TITLE      AFFECTED                 AGE
+▌P-260715…  ACTIVE  CUSTOM_ALERT        Ingest v…  demo-environment         8m
+ P-260715…  ACTIVE  AVAILABILITY        Kubernet…  aks-system-31337-vmss0…  18m
+ P-260715…  CLOSED  CUSTOM_ALERT        Syntheti…  demo-environment         19m
+ P-260715…  ACTIVE  ERROR               Failure …  OrderController +2       40m
+ P-260715…  ACTIVE  RESOURCE_CONTENTI…  Memory s…  ip-10-0-4-30.ec2.inter…  1h
+
+
+
+
+
+
+
+
+
+
+
+
+
+ enter inspect  l logs  s traces  m metrics  v events  / filter  f facets  J/K …
+ ≡ dtctl query 'fetch dt.davis.problems, from:now() - 2h | fieldsAdd dt.system.…

@@ -1,0 +1,24 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                               last 2h
+ namespaces ───────────────────────────────────────────────────────────────────
+ 5 rows · 1s
+ NAME                                    CLUSTER            PODS  RUNNING   SEEN
+▌checkout                                demo-eks-useast1     30       16    77d
+ checkout                                demo-aks-westeu      12       12    15d
+ dynatrace                               demo-eks-useast1    110      110   114d
+ kube-system                             demo-eks-useast1     41       41   445d
+ monitoring                              demo-aks-westeu       3        3    29h
+
+
+
+
+
+
+
+
+
+
+
+
+
+ enter workloads  d details  l logs  s traces  p problems  v events  / filter  …
+ ≡ dtctl query 'smartscapeNodes "K8S_NAMESPACE" | fields id, name, type, cluste…
