@@ -1,0 +1,24 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                               last 2h
+ fleet·activegates ────────────────────────────────────────────────────────────
+ 2 rows · 1s
+  oneagents    activegates    modules
+ NAME      VERSION       GROUP        PURPOSE  MODULES        ZONE    OS    SEEN
+▌dynakub…  1.349.62.20…  default               DEBUGGING,KU…  defau…  LIN…   29d
+ ag-eu-c…  1.347.40.20…  eu-central   routing  AGENT_ROUTIN…  defau…  LIN…   29d
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ tab lens  enter details  d record  l agentlogs  v events  / filter  f facets  …
+ ✓ lens: activegates — ActiveGates — the tenant's data-collection gateways
