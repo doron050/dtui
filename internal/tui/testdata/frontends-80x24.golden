@@ -1,0 +1,24 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                               last 2h
+ frontends ────────────────────────────────────────────────────────────────────
+ 4 rows · 1s
+ NAME                            TYPE    REQUESTS         ERRORS            SEEN
+▌easytravel-web                  web     ⣠⣄⣀⣤⡤⣄⡤⢶      6  ⠹⣄⣀⣀⣀⣤⣀⡼      4    76d
+ easytravel-android              mobile  ⣀⣀⣀⣀⣀⣀⣀⣀     74  ⣀⣀⣀⣀⣀⣀⣀⣀     13    76d
+ kiosk-terminal                  custom                                      28m
+ storefront                      web                                         69d
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ enter details  d record  m metrics  p problems  v events  u sessions  e userev…
+ ≡ dtctl query 'smartscapeNodes "FRONTEND" | fieldsRemove references | sort nam…

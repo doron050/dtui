@@ -1,0 +1,24 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                               last 2h
+ events ───────────────────────────────────────────────────────────────────────
+ 5 rows · 1s
+  all    alerts    changes    fleet    system    audit
+ TIME        SEV   STATUS  TYPE                  NAME       SOURCE
+▌11:59:12          CLOSED  WARNING               Process …
+ 11:58:44          CLOSED  WARNING               Process …
+ 11:57:02          CLOSED  CUSTOM_INFO           Deployme…
+ 11:54:30          CLOSED  AVAILABILITY_EVENT    HTTP mon…
+ 11:51:10          CLOSED  WARNING               Process …
+
+
+
+
+
+
+
+
+
+
+
+
+ tab lens  enter inspect  l logs  m metrics  p problems  / filter  f facets  J/…
+ ≡ dtctl query 'fetch events, from:now() - 2h | fieldsAdd dt.system.bucket | so…

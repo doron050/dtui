@@ -1,0 +1,40 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                   last 2h
+ modules ──────────────────────────────────────────────────────────────────────────────────────────
+ 5 rows · 1s
+ HOST              NAMESPACE    MODULE       TECH   HEALTH  VERSION        INJECT  MODULE ID    SEEN
+▌ip-10-0-1-17                   Apache Tom…  java   Criti…  1.325.47.202…  full    8f2c1e0a9b…   10m
+ ip-10-0-1-17                   Apache Tom…  java   Criti…  1.325.47.202…  full    8f2c1e0a9b…   10m
+ aks-user-27182-…  checkout     SpringBoot…  java   Healt…  1.327.12.202…  runti…  1a2b3c4d5e…   10m
+ aks-user-27182-…  checkout     node store…  node…  Healt…  1.327.12.202…  runti…  1a2b3c4d5e…   11m
+ win-build-agent…               IIS app po…  dotn…  Warni…  1.321.30.202…  full    9d8c7b6a59…   18m
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ Apache Tomcat orders-api
+
+  timestamp: 11:49:54
+  host.name: ip-10-0-1-17
+
+
+
+
+
+ enter inspect  l agentlogs  v events  / filter  f facets  J/K sort  : views  t timeframe  S segmen…
+ ≡ dtctl query 'fetch events, from:now() - 30m | filter event.kind == "FLEET_EVENT" and event.type …

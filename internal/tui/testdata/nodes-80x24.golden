@@ -1,0 +1,24 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                               last 2h
+ nodes ────────────────────────────────────────────────────────────────────────
+ 4 rows · 1s
+ NAME            INSTANCE     ZONE        CPUS   PODS  VERSION              SEEN
+▌aks-system-31…  Standard_D…  westeurop…     4     11  v1.32.6                2d
+ aks-system-31…  Standard_D…  westeurop…     4     11  v1.32.6                2d
+ aks-user-2718…  Standard_D…  westeurop…     4     23  v1.32.6               44h
+ aks-user-2718…  Standard_D…  westeurop…     4     19  v1.32.6               15d
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ enter pods  d details  l logs  s traces  p problems  v events  / filter  f fac…
+ ≡ dtctl query 'smartscapeNodes "K8S_NODE" | parse k8s.object, "JSON:obj" | fie…

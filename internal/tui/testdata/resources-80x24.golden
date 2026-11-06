@@ -1,0 +1,24 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                               last 2h
+ resources ────────────────────────────────────────────────────────────────────
+ 5 rows · 1s
+ NAME              TYPE                        REGION        ACCOUNT        SEEN
+▌AWS_EC2_VOLUME-…  ec2 volume                  us-east-1     000000000001    49d
+ $default          apigatewayv2 stage          us-east-1     000000000002    50d
+ $default          apigatewayv2 stage          us-east-1     000000000002    29d
+ orders-export-h…  lambda function             eu-central-1  000000000002    39d
+ orders-db-repli…  rds dbinstance              eu-central-1  000000000003    40d
+
+
+
+
+
+
+
+
+
+
+
+
+
+ enter details  d record  l logs  s traces  m metrics  p problems  v events  / …
+ ≡ dtctl query 'smartscapeNodes "*" | fieldsAdd display = coalesce(if(name != "…

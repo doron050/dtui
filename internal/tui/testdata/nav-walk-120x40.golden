@@ -1,0 +1,40 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                                       last 2h
+ walk (ip-10-0-4-30.ec2.internal) ─────────────────────────────────────────────────────────────────────────────────────
+ ip-10-0-4-30.ec2.internal
+▌· ip-10-0-4-30.ec2.internal  HOST · 11 relations                       │ ip-10-0-4-30.ec2.internal
+ ▾ runs on → (1)                                                        │  HOST  HOST-0000000000000B01
+    · AWS_EC2_INSTANCE       i-0123456789abcdef0                        │
+ ▾ ← runs on (10)                                                       │ no active problems (24h)
+    · CONTAINER              orders-api                                 │
+    · CONTAINER              storefront-web                             │ ▍ key facts
+    · PROCESS                java orders-api                            │   id: HOST-0000000000000B01
+    · PROCESS                node storefront-web                        │   os: LINUX · Amazon Linux 2 (kernel 5.10.23…
+    · PROCESS                OneAgent network monitor                   │   cpu: 16 logical / 8 physical
+    · PROCESS                containerd                                 │   memory: 30.0 GiB
+    · PROCESS                kubelet                                    │   ip: 203.0.113.78,10.0.4.30
+    · PROCESS                python3 report-worker                      │   public ip: 203.0.113.78
+    · PROCESS                envoy                                      │   cloud: aws us-east-1a
+    · PROCESS                nginx                                      │   hypervisor: AWS_NITRO
+                                                                        │   first seen: Jul 01 11:29
+                                                                        │   last seen: 11:45:00
+                                                                        │
+                                                                        │
+                                                                        │
+                                                                        │
+                                                                        │
+                                                                        │
+                                                                        │
+                                                                        │
+                                                                        │
+                                                                        │
+                                                                        │
+                                                                        │
+                                                                        │
+                                                                        │
+                                                                        │
+                                                                        │
+                                                                        │
+                                                                        │
+                                                                        │
+ enter walk to  ← back  d details  z fold  i direction  M mesh  / filter  : views  t timeframe  S segments  r refresh  …
+ ≡ dtctl query 'smartscapeEdges "*" | filter source_id == toSmartscapeId("HOST-0000000000000B01") or target_id == toSma…

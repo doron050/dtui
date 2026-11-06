@@ -1,0 +1,50 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                                                                               last 2h
+ events ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 5 rows · 1s                                                                                                  │ gke-demo-pool-1-a1b2c3d4-x9k2
+  all    alerts    changes    fleet    system    audit                                                        │
+ TIME          SEV   STATUS  TYPE                      NAME                          SOURCE                   │  status: CLOSED
+▌11:59:12            CLOSED  WARNING                   Process restart                                        │  type: WARNING
+ 11:58:44            CLOSED  WARNING                   Process restart                                        │  lasted: 0s (11:59:12 → 11:59:12)
+ 11:57:02            CLOSED  CUSTOM_INFO               Deployment spec change                                 │
+ 11:54:30            CLOSED  AVAILABILITY_EVENT        HTTP monitor location unava…                           │
+ 11:51:10            CLOSED  WARNING                   Process restart                                        │
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ tab lens  enter inspect  l logs  m metrics  p problems  / filter  f facets  J/K sort  : views  t timeframe  S segments  r refresh  ? help  q quit
+ ≡ dtctl query 'fetch events, from:now() - 2h | fieldsAdd dt.system.bucket | sort timestamp desc | limit 300'

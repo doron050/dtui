@@ -1,0 +1,40 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                   last 2h
+ entities ─────────────────────────────────────────────────────────────────────────────────────────
+ 9 rows · 1s
+ TYPE                                                                                          COUNT
+▌PROCESS                                                                                       99547
+ CONTAINER                                                                                     81405
+ AZURE_MICROSOFT_DBFORPOSTGRESQL_FLEXIBLESERVERS_CONFIGURATIONS                                57055
+ K8S_POD                                                                                       47857
+ K8S_SECRET                                                                                    28813
+ SERVICE                                                                                        9120
+ HOST                                                                                           2731
+ K8S_NODE                                                                                       1144
+ K8S_CLUSTER                                                                                      78
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ entities
+
+
+
+
+
+
+
+
+ enter resources  / filter  f facets  J/K sort  : views  t timeframe  S segments  r refresh  ? help…
+ ≡ dtctl query 'smartscapeNodes "*" | summarize count = count(), by:{type} | sort count desc | limi…

@@ -24,7 +24,7 @@ var problemsSpec = &Spec{
 		return b.String()
 	},
 	Columns: []Column{
-		{Title: "ID", Field: "display_id", Width: 9},
+		{Title: "ID", Field: "display_id", Width: 10},
 		{Title: "STATUS", Field: "event.status", Width: 6, Class: classProblemStatus},
 		{Title: "CATEGORY", Field: "event.category", Width: 20},
 		{Title: "TITLE", Field: "event.name"},

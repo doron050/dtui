@@ -1,0 +1,23 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                               last 2h
+ problems › P-26071542 ────────────────────────────────────────────────────────
+ P-26071542  Kubernetes node not ready
+ ● ACTIVE  ·  SEV2  ·  started 18m ago  ·  1 affected entity  ·  ⧖ 11:37 → now
+  1 overview   2 evidence   3 logs   4 traces   5 events   6 details
+────────────────────────────────────────────────────────────────────────────────
+ status          ACTIVE (updated)
+ severity        SEV2
+ category        AVAILABILITY
+ impact          Infrastructure
+ started         11:42:00 · 18m ago
+ k8s             demo-aks-westeu
+
+▍ impact — 1 affected
+▌  aks-system-31337-vmss000004   K8S_NODE   K8S_NODE-0000000000000F11
+
+▍ davis says
+ Node **aks-system-31337-vmss000004** in cluster **demo-aks-westeu** has been
+ in NotReady state for more than 3 minutes. Pods scheduled on the node may be
+ evicted. Last kubelet heartbeat: 2026-07-15T11:38:41Z.
+
+
+ 1-9/tab tabs  j/k move  enter open entity  x relations  . pin  y yank id  : vi…
