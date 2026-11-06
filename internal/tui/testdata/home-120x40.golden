@@ -1,6 +1,6 @@
- ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                                       last 2h
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                   last 2h · ◷ 5 panels differ
  home ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-╭─ ● active problems (24h) · 2 ───────────────────────────╮ ╭─ ● failing services · 2 ────────────────────────────────╮
+╭─ ● active problems  ◷ 24h  · 2 ─────────────────────────╮ ╭─ ● failing services · 2h · 2 ───────────────────────────╮
 │ P-260714  19m  CPU saturation · ip-10-0-2-41            │ │ OrderController (shop)                        128 fail… │
 │ P-260709   1h  Failure rate increase · OrderController… │ │ storefront-web                                  7 fail… │
 │                                                         │ │                                                         │
@@ -12,7 +12,7 @@
 │                                                         │ │                                                         │
 │                                                         │ │                                                         │
 ╰─────────────────────────────────────────────────────────╯ ╰─────────────────────────────────────────────────────────╯
-╭─ ● kubernetes warnings (24h) · 2 ───────────────────────╮ ╭─ ● frontend errors (24h) · 2 ───────────────────────────╮
+╭─ ● kubernetes warnings  ◷ 24h  · 2 ─────────────────────╮ ╭─ ● frontend errors  ◷ 24h  · 2 ─────────────────────────╮
 │ BackOff                     15×  checkout-7d9f8b6c5d-x… │ │    42×  TypeError: Cannot read properties of undefined… │
 │ FailedScheduling             2×  cart-5c6d7e8f9a-p9r8s  │ │     9×  NetworkError when attempting to fetch resource… │
 │                                                         │ │                                                         │
@@ -24,7 +24,7 @@
 │                                                         │ │                                                         │
 │                                                         │ │                                                         │
 ╰─────────────────────────────────────────────────────────╯ ╰─────────────────────────────────────────────────────────╯
-╭─ ● open vulnerabilities (24h) · 2 ──────────────────────╮ ╭─ ● attack detections (24h) · 2 ─────────────────────────╮
+╭─ ● open vulnerabilities  ◷ 24h  · 2 ────────────────────╮ ╭─ ● attack detections  ◷ 24h  · 2 ───────────────────────╮
 │ S-101  9.8 CRITICAL Remote code execution in log4j-core │ │ 11:52:10 SQL_INJECTION  Blocked checkout                │
 │ S-102  7.5 HIGH     Denial of service in netty-codec-h… │ │ 11:20:44 CMD_INJECTION  Monitored cart                  │
 │                                                         │ │                                                         │

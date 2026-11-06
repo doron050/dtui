@@ -169,6 +169,12 @@ dtctl (dtctl ctx set). dtui is read-only and interactive-only.`,
 			opts.WorkspaceSegments = workspaceSegments(ws)
 			opts.WorkspacePrimaryTags = ws.PrimaryTags
 			opts.InitialTimeframe = ws.Timeframe
+			panels, issues := homeLayout(ws)
+			opts.HomePanels = panels
+			if notice := homeNotice(issues); notice != "" {
+				opts.HomeNotice = notice
+				wsWarnings = append(wsWarnings, "home layout ignored: "+notice)
+			}
 		}
 		switch {
 		case len(wsWarnings) > 0:
@@ -347,6 +353,9 @@ func workspaceNotice(ws *workspace.Workspace) string {
 	if ws.View != "" {
 		parts = append(parts, "view "+ws.View)
 	}
+	if ws.Home != nil && len(ws.HomeIssues) == 0 {
+		parts = append(parts, plural(len(ws.Home.Panels), "home panel"))
+	}
 	if len(parts) == 0 {
 		return ""
 	}
@@ -410,6 +419,9 @@ func main() {
 
 	// dtctl reserves -v for --verbose; keep the long form only.
 	rootCmd.Flags().Bool("version", false, "version for dtui")
+
+	workspaceCmd.AddCommand(workspaceValidateCmd)
+	rootCmd.AddCommand(workspaceCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)

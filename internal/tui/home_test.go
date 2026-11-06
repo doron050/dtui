@@ -23,7 +23,7 @@ func TestHomePanelsLoadIndependently(t *testing.T) {
 	// Each panel got its own DQL.
 	for _, p := range hv.panels {
 		if p.dql == "" {
-			t.Errorf("panel %q has no query", p.title)
+			t.Errorf("panel %q has no query", p.def.Title)
 		}
 	}
 }
@@ -98,10 +98,10 @@ func homeOf(t *testing.T, a *app) *homeView {
 	return h
 }
 
-// feedPanel delivers records (or an error) to one panel at the current
-// refresh generation.
+// feedPanel delivers records (or an error) to one panel at the refresh
+// generation it last fired — fixed-window panels keep theirs across `t`.
 func feedPanel(h *homeView, idx int, err error, recs ...map[string]any) {
-	h.Update(dataMsg{owner: panelOwner{v: h, idx: idx}, seq: h.seq, records: recs, err: err})
+	h.Update(dataMsg{owner: panelOwner{v: h, idx: idx}, seq: h.panels[idx].seq, records: recs, err: err})
 }
 
 // seedEveryPanel gives each panel one or two rows so the cursor can tour them.
@@ -136,17 +136,17 @@ func TestHomeViewPanelStates(t *testing.T) {
 
 	out = ansi.Strip(h.View(120, 40))
 	for _, want := range []string{
-		"✗ query failed: boom",          // per-panel error, the others unaffected
-		"✓ nothing to report",           // empty result is explicit, not blank
-		"BackOff",                       // a loaded row
-		"5×",                            // series summed into an occurrence count
-		"kubernetes warnings (24h) · 1", // row count in the title
+		"✗ query failed: boom",            // per-panel error, the others unaffected
+		"✓ nothing to report",             // empty result is explicit, not blank
+		"BackOff",                         // a loaded row
+		"5×",                              // series summed into an occurrence count
+		"kubernetes warnings  ◷ 24h  · 1", // window badge and row count in the title
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("view missing %q:\n%s", want, out)
 		}
 	}
-	if strings.Contains(out, "active problems (24h) ·") {
+	if strings.Contains(out, "active problems  ◷ 24h  ·") {
 		t.Error("an errored panel must not advertise a row count")
 	}
 	if !h.Busy() {
@@ -181,8 +181,8 @@ func TestHomeViewLayoutColumns(t *testing.T) {
 		t.Errorf("narrow terminals stack panels in one column:\n%s", narrow)
 	}
 	for _, p := range h.panels {
-		if !strings.Contains(narrow, p.title) {
-			t.Errorf("narrow layout lost panel %q", p.title)
+		if !strings.Contains(narrow, p.def.Title) {
+			t.Errorf("narrow layout lost panel %q", p.def.Title)
 		}
 	}
 }
@@ -267,7 +267,7 @@ func TestHomeDrillDowns(t *testing.T) {
 		{name: "problem keeps longer window", panel: 0, tfKey: "4", view: "problems", tf: "7d", filter: "P-1"},
 		{name: "k8s warning scopes the pod", panel: 2, view: "pods", tf: day},
 		{name: "frontend error opens errors lens", panel: 3, view: "userevents", tf: day, filter: "TypeError", lens: 1},
-		{name: "vulnerability uses global window", panel: 4, view: "vulnerabilities", tf: catalog.DefaultTimeframe.Label, filter: "S-1"},
+		{name: "vulnerability carries its 24h window", panel: 4, view: "vulnerabilities", tf: day, filter: "S-1"},
 		{name: "attack keeps 24h", panel: 5, view: "attacks", tf: day, filter: "F-1"},
 		{name: "attack keeps longer window", panel: 5, tfKey: "4", view: "attacks", tf: "7d", filter: "F-1"},
 	}
@@ -392,8 +392,8 @@ func TestHomeIgnoresForeignResults(t *testing.T) {
 	}
 }
 
-// Changing the global window refetches every panel; only the failing
-// services panel follows it, the rest are pinned to their 24h lookback.
+// Changing the global window refetches only the failing services panel,
+// which follows it; the rest stay pinned to their 24h lookback.
 func TestHomeTimeframeRefetches(t *testing.T) {
 	a := testApp(t, "home")
 	h := homeOf(t, a)
@@ -416,9 +416,15 @@ func TestHomeTimeframeRefetches(t *testing.T) {
 	if !strings.Contains(h.panels[1].dql, "from:now() - 7d") {
 		t.Errorf("failing services follows the global window:\n%s", h.panels[1].dql)
 	}
+	if h.panels[1].seq != h.seq {
+		t.Error("the global-following panel refetches on t")
+	}
 	for _, i := range []int{0, 2, 3, 4, 5} {
+		if h.panels[i].seq == h.seq {
+			t.Errorf("fixed panel %q must not refetch on t", h.panels[i].def.Title)
+		}
 		if !strings.Contains(h.panels[i].dql, "now() - 24h") {
-			t.Errorf("panel %q keeps its 24h lookback:\n%s", h.panels[i].title, h.panels[i].dql)
+			t.Errorf("panel %q keeps its 24h lookback:\n%s", h.panels[i].def.Title, h.panels[i].dql)
 		}
 	}
 }
@@ -430,23 +436,211 @@ func TestHomeRowClasses(t *testing.T) {
 	for _, c := range []struct{ level, class string }{
 		{"CRITICAL", "error"}, {"HIGH", "warn"}, {"MEDIUM", "dim"}, {"", "dim"},
 	} {
-		if _, got := h.panels[4].line(map[string]any{"level": c.level}); got != c.class {
+		if _, got := h.panels[4].def.Line(map[string]any{"level": c.level}); got != c.class {
 			t.Errorf("vulnerability %q → class %q, want %q", c.level, got, c.class)
 		}
 	}
-	if _, got := h.panels[5].line(map[string]any{"finding.action": "Blocked"}); got != "ok" {
+	if _, got := h.panels[5].def.Line(map[string]any{"finding.action": "Blocked"}); got != "ok" {
 		t.Errorf("blocked attack → %q, want ok", got)
 	}
-	if _, got := h.panels[5].line(map[string]any{"finding.action": "Monitored"}); got != "warn" {
+	if _, got := h.panels[5].def.Line(map[string]any{"finding.action": "Monitored"}); got != "warn" {
 		t.Errorf("monitored attack → %q, want warn", got)
 	}
-	text, _ := h.panels[0].line(map[string]any{"display_id": "P-1", "name": "cpu saturation",
+	text, _ := h.panels[0].def.Line(map[string]any{"display_id": "P-1", "name": "cpu saturation",
 		"affected": []any{"checkout", "cart", "orders"}})
 	if !strings.Contains(text, "checkout +2") {
 		t.Errorf("problem line should name the first affected entity and count the rest: %q", text)
 	}
-	text, _ = h.panels[1].line(map[string]any{"svc": "checkout", "ns": "shop", "failed": "4"})
+	text, _ = h.panels[1].def.Line(map[string]any{"svc": "checkout", "ns": "shop", "failed": "4"})
 	if !strings.Contains(text, "checkout (shop)") {
 		t.Errorf("failing service line should carry its namespace: %q", text)
+	}
+}
+
+func homeTestApp(t *testing.T, panels []HomePanelConfig, notice string) (*app, *homeView) {
+	t.Helper()
+	a := testAppSeeded(t, Options{ContextName: "test", SafetyLevel: "readonly", InitialView: "home",
+		HomePanels: panels, HomeNotice: notice})
+	return a, a.top().(*homeView)
+}
+
+// TestHomeConfiguredLayout: a workspace layout picks, orders and windows the
+// panels; each one's DQL carries its own window.
+func TestHomeConfiguredLayout(t *testing.T) {
+	_, hv := homeTestApp(t, []HomePanelConfig{
+		{ID: "vulnerabilities", Timeframe: "7d"},
+		{ID: "problems"},
+		{ID: "failing-services", Timeframe: "global"},
+	}, "")
+	if len(hv.panels) != 3 {
+		t.Fatalf("panels = %d, want 3", len(hv.panels))
+	}
+	for i, want := range []struct{ id, from string }{
+		{"vulnerabilities", "from:now() - 7d"},
+		{"problems", "from:now() - 24h"},
+		{"failing-services", "from:now() - 2h"},
+	} {
+		p := hv.panels[i]
+		if p.def.ID != want.id || !strings.Contains(p.dql, want.from) {
+			t.Errorf("panel %d = %s, dql %q; want %s with %q", i, p.def.ID, p.dql, want.id, want.from)
+		}
+	}
+}
+
+// TestHomeWindowBadges: a panel whose window differs from the header's wears
+// a ◷ pill, one matching it a dim label, and the header counts the
+// differing panels.
+func TestHomeWindowBadges(t *testing.T) {
+	a, hv := homeTestApp(t, []HomePanelConfig{
+		{ID: "vulnerabilities", Timeframe: "7d"},
+		{ID: "failing-services"},
+	}, "")
+	out := ansi.Strip(hv.View(120, 30))
+	if !strings.Contains(strings.Join(strings.Fields(out), " "), "open vulnerabilities ◷ 7d") {
+		t.Errorf("differing panel should carry a ◷ 7d pill:\n%s", out)
+	}
+	if !strings.Contains(out, "failing services · 2h") {
+		t.Errorf("global-following panel should show its window:\n%s", out)
+	}
+	if head := ansi.Strip(a.View()); !strings.Contains(head, "last 2h · ◷ 1 panel differ") {
+		t.Errorf("header should count differing panels:\n%s", head)
+	}
+}
+
+// TestHomeTimeframeChangeSkipsFixedPanels: t re-runs only the panels that
+// follow the global window and says which ones stay fixed.
+func TestHomeTimeframeChangeSkipsFixedPanels(t *testing.T) {
+	a, hv := homeTestApp(t, []HomePanelConfig{
+		{ID: "problems"},
+		{ID: "failing-services"},
+	}, "")
+	problemsDQL := hv.panels[0].dql
+	tf, _ := catalog.ParseTimeframe("6h")
+	deliver(a, a.setTimeframe(tf))
+	if hv.panels[0].dql != problemsDQL {
+		t.Errorf("fixed problems panel re-ran: %q", hv.panels[0].dql)
+	}
+	if !strings.Contains(hv.panels[1].dql, "from:now() - 6h") {
+		t.Errorf("global panel should follow t: %q", hv.panels[1].dql)
+	}
+	if !strings.Contains(a.status, "not following t: problems 24h") {
+		t.Errorf("status should name the fixed panels, got %q", a.status)
+	}
+}
+
+// TestHomeRejectedLayoutBanner: a rejected layout shows the default panels
+// under a persistent banner naming the reason.
+func TestHomeRejectedLayoutBanner(t *testing.T) {
+	_, hv := homeTestApp(t, nil, `home.panels[1]: unknown panel "vulns"`)
+	if len(hv.panels) != len(catalog.HomePanels) {
+		t.Fatalf("rejected layout should fall back to the default panels, got %d", len(hv.panels))
+	}
+	out := ansi.Strip(hv.View(160, 30))
+	for _, want := range []string{"✗ home config ignored", `unknown panel "vulns"`, "dtui workspace validate"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("banner misses %q:\n%s", want, out)
+		}
+	}
+	if _, clean := homeTestApp(t, nil, ""); strings.Contains(ansi.Strip(clean.View(160, 30)), "home config ignored") {
+		t.Error("no banner without a notice")
+	}
+}
+
+// TestHomeJumpCarriesPanelWindow: enter opens the full view over the
+// panel's window, widened to the global one — the selected row must be in
+// the jumped-to list. The header then names that window.
+func TestHomeJumpCarriesPanelWindow(t *testing.T) {
+	a, hv := homeTestApp(t, []HomePanelConfig{{ID: "vulnerabilities", Timeframe: "7d"}}, "")
+	hv.Update(dataMsg{owner: panelOwner{v: hv, idx: 0}, seq: hv.panels[0].seq,
+		records: []map[string]any{{"display_id": "S-1", "title": "synthetic"}}})
+	press(a, key("enter"))
+	tv, ok := a.top().(*tableView)
+	if !ok || tv.spec.Name != "vulnerabilities" {
+		t.Fatalf("enter should open vulnerabilities, top = %T", a.top())
+	}
+	if tv.scope.Timeframe.Label != "7d" {
+		t.Errorf("jump window = %q, want the panel's 7d", tv.scope.Timeframe.Label)
+	}
+	if head := strings.Join(strings.Fields(ansi.Strip(a.View())), " "); !strings.Contains(head, "◷ last 7d (t: 2h)") {
+		t.Errorf("header should name the view's own window:\n%s", head)
+	}
+}
+
+func TestHomeColumnsSplit(t *testing.T) {
+	left := []HomePanelConfig{{ID: "a"}, {ID: "b"}, {ID: "c"}}
+	mixed := []HomePanelConfig{{ID: "a"}, {ID: "b", Right: true}, {ID: "c"}}
+	for name, c := range map[string]struct {
+		panels []HomePanelConfig
+		wide   bool
+		want   string
+	}{
+		"left only":    {left, true, "[[0 1 2]]"},
+		"mixed wide":   {mixed, true, "[[0 2] [1]]"},
+		"mixed narrow": {mixed, false, "[[0 1 2]]"},
+		"default":      {DefaultHomePanels(), true, "[[0 2 4] [1 3 5]]"},
+	} {
+		if got := fmt.Sprint(HomeColumns(c.panels, c.wide)); got != c.want {
+			t.Errorf("%s: columns = %s, want %s", name, got, c.want)
+		}
+	}
+}
+
+// TestHomeColumnsRender: right-column panels render beside the left ones,
+// and without any right panel every panel spans the full width.
+func TestHomeColumnsRender(t *testing.T) {
+	lineWith := func(view, s string) string {
+		for _, l := range strings.Split(view, "\n") {
+			if strings.Contains(l, s) {
+				return l
+			}
+		}
+		return ""
+	}
+	_, hv := homeTestApp(t, []HomePanelConfig{
+		{ID: "problems"},
+		{ID: "attacks", Right: true},
+		{ID: "vulnerabilities"},
+	}, "")
+	view := ansi.Strip(hv.View(140, 30))
+	if top := lineWith(view, "active problems"); !strings.Contains(top, "attack detections") {
+		t.Errorf("attacks should sit right of problems:\n%s", view)
+	}
+	if strings.Contains(lineWith(view, "open vulnerabilities"), "attack detections") {
+		t.Errorf("vulnerabilities should sit under problems, not beside attacks:\n%s", view)
+	}
+
+	_, hv = homeTestApp(t, []HomePanelConfig{{ID: "problems"}, {ID: "attacks"}}, "")
+	view = ansi.Strip(hv.View(140, 30))
+	if top := strings.TrimRight(lineWith(view, "active problems"), " "); strings.Count(top, "╭") != 1 || len([]rune(top)) < 130 {
+		t.Errorf("left-only panels should span the full width: %q", top)
+	}
+}
+
+// TestHomePanelLineSafeText: record text in a panel line cannot drive the
+// terminal — control characters render as visible glyphs.
+func TestHomePanelLineSafeText(t *testing.T) {
+	_, hv := homeTestApp(t, []HomePanelConfig{{ID: "problems"}}, "")
+	hv.Update(dataMsg{owner: panelOwner{v: hv, idx: 0}, seq: hv.panels[0].seq,
+		records: []map[string]any{{"display_id": "P-1", "status": "ACTIVE", "name": "evil\x1b[2Jname"}}})
+	out := hv.View(120, 20)
+	if strings.Contains(out, "\x1b[2J") || !strings.Contains(ansi.Strip(out), "evil␛[2Jname") {
+		t.Errorf("control characters should render as glyphs:\n%q", ansi.Strip(out))
+	}
+}
+
+// TestHomeColumnsTabOrder: tab follows entry order, not screen columns.
+func TestHomeColumnsTabOrder(t *testing.T) {
+	a, hv := homeTestApp(t, []HomePanelConfig{
+		{ID: "problems"},
+		{ID: "attacks", Right: true},
+		{ID: "vulnerabilities"},
+	}, "")
+	var order []string
+	for range hv.panels {
+		order = append(order, hv.panels[hv.focus].def.ID)
+		press(a, key("tab"))
+	}
+	if got := strings.Join(order, ","); got != "problems,attacks,vulnerabilities" {
+		t.Errorf("tab order = %s", got)
 	}
 }
