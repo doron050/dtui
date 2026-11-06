@@ -85,7 +85,7 @@ func BuildSessionTimeline(records []map[string]any) []TimelineRow {
 		row := TimelineRow{
 			Rec:   rec,
 			Kind:  timelineKind(classifier),
-			Label: timelineLabel(rec, classifier),
+			Label: SafeText(timelineLabel(rec, classifier)),
 			Start: start,
 			End:   end,
 			Trace: Str(rec, "trace.id"),

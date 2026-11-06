@@ -906,6 +906,9 @@ tied to view lifetime.
   query flags" principle.
 - Signal views opened without any scope prompt for one (entity picker) rather
   than running an unbounded query.
+- Record strings are display-sanitized, never rewritten: `catalog.SafeText`
+  at the points where values turn into display text, and `sanitizeFrame` on
+  the finished frame. Raw values still drive queries and yank.
 
 ### Testing
 

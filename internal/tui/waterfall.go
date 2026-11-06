@@ -271,6 +271,7 @@ func buildWaterfall(records []map[string]any) []wfRow {
 		if label == "" {
 			label = catalog.Str(rec, "endpoint.name")
 		}
+		label = catalog.SafeText(label)
 		guide, childPrefix := prefix, prefix
 		if !root {
 			if last {
@@ -286,7 +287,7 @@ func buildWaterfall(records []map[string]any) []wfRow {
 			guide: guide,
 			label: label,
 			kind:  catalog.Str(rec, "span.kind"),
-			svc:   catalog.SpanService(rec),
+			svc:   catalog.SafeText(catalog.SpanService(rec)),
 			start: parseTimeNs(catalog.Str(rec, "start_time")),
 			end:   parseTimeNs(catalog.Str(rec, "end_time")),
 			// SpanErrored, not SpanFailed: the request verdict exists only on
@@ -297,7 +298,7 @@ func buildWaterfall(records []map[string]any) []wfRow {
 			category: catalog.SpanCategory(rec),
 		}
 		if row.failed || row.excs > 0 {
-			row.errInfo = catalog.SpanErrorBrief(rec)
+			row.errInfo = catalog.SafeText(catalog.SpanErrorBrief(rec))
 		}
 		if op := catalog.GenAIOp(rec); op != "" {
 			row.genaiOp = catalog.GenAIOpShort(op)
@@ -305,7 +306,7 @@ func buildWaterfall(records []map[string]any) []wfRow {
 			// The prompt or tool call is the span's story — the raw span
 			// name ("anthropic.chat") says nothing an op badge doesn't.
 			if detail := catalog.GenAIDetail(rec); detail != "" {
-				row.label = detail
+				row.label = catalog.SafeText(detail)
 			}
 		}
 		rows = append(rows, row)

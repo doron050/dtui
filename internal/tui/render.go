@@ -79,6 +79,7 @@ func renderValue(key string, val any, width int) valueView {
 
 func renderString(key, s string, width int) valueView {
 	raw := s
+	s = catalog.SafeText(s)
 	switch {
 	case s == "":
 		return valueView{lines: []string{theme.NullVal.Render(`""`)}, raw: raw}
@@ -122,7 +123,9 @@ func renderString(key, s string, width int) valueView {
 		return valueView{lines: wrapLines(theme.URL.Render(s), width), compact: theme.URL.Render(s), raw: raw}
 
 	case isStackKey(key) && (strings.ContainsRune(s, '\n') || len(s) > 160):
-		return stackValue(s, width)
+		vv := stackValue(s, width)
+		vv.raw = raw
+		return vv
 	}
 
 	// A string holding a JSON document (log content, k8s manifests) renders as
@@ -335,7 +338,7 @@ func jsonRows(v any, path string, depth, width int) []jsonNode {
 		var nodes []jsonNode
 		for _, k := range keys {
 			childPath := joinJSONPath(path, k)
-			label := pad + theme.JSONKey.Render(k) + theme.JSONPunct.Render(":")
+			label := pad + theme.JSONKey.Render(catalog.SafeText(k)) + theme.JSONPunct.Render(":")
 			if scalar, ok := jsonScalar(val[k]); ok {
 				nodes = append(nodes, scalarNode(label+" "+scalar, childPath, val[k], width, depth))
 			} else {

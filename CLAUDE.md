@@ -102,6 +102,18 @@ dtctl's `ColorEnabled()`.
 **Layering rule:** nothing imports `internal/tui` except the `dtui` main
 package; no HTTP inside `internal/tui`; every API call is a `tea.Cmd` goroutine.
 
+**Rendering rule:** record data is untrusted terminal input. Text that reaches
+the screen from a record goes through `catalog.SafeText` before any theme
+styling (it turns control characters into visible glyphs like `␛`).
+`Column.Text`/`TextAt`, `PreviewTitle`/`PreviewFacts`/`PreviewValue` and the
+inspector's `renderString` already do this. Only add it when you render a
+record field some other way, e.g. building a label from `catalog.Str`. Never
+put it in `flatten`/`pad`/`wrap`, because those also get already-styled text.
+Never use it on values used for queries or yank, which must stay raw.
+`app.View()` also runs every frame through `sanitizeFrame`, which lets only
+color codes (SGR) through. That is a safety net, not a replacement for
+`SafeText`.
+
 ### Runtime discovery
 
 Shapes are hardcoded only as *defaults*; the rest is discovered per environment

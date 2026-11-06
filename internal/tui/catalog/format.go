@@ -7,7 +7,39 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
+
+// SafeText makes a tenant-supplied string safe to display: terminal control
+// characters become visible Control Pictures glyphs (ESC → ␛, BEL → ␇),
+// DEL becomes ␡, C1 controls and invalid UTF-8 become U+FFFD, and carriage
+// returns are dropped. Newlines and tabs pass through for the callers' own
+// line handling. Record data can then neither drive the terminal nor skew
+// width math. Display-only: queries and yank keep the raw value.
+func SafeText(s string) string {
+	if utf8.ValidString(s) && strings.IndexFunc(s, unsafeRune) < 0 {
+		return s
+	}
+	return strings.Map(safeRune, s)
+}
+
+func unsafeRune(r rune) bool {
+	return (r < 0x20 && r != '\n' && r != '\t') || (r >= 0x7f && r <= 0x9f)
+}
+
+func safeRune(r rune) rune {
+	switch {
+	case r == '\r':
+		return -1
+	case r < 0x20 && r != '\n' && r != '\t':
+		return 0x2400 + r
+	case r == 0x7f:
+		return '\u2421'
+	case r >= 0x80 && r <= 0x9f:
+		return utf8.RuneError
+	}
+	return r
+}
 
 // FormatValue renders an arbitrary record value as table-cell text.
 func FormatValue(v any) string {
