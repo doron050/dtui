@@ -1,7 +1,7 @@
 module,version,license,targets
 github.com/adrg/xdg,v0.5.3,MIT,linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64
 github.com/alecthomas/chroma/v2,v2.20.0,MIT,linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64
-github.com/andybalholm/brotli,v1.1.1,MIT,linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64
+github.com/andybalholm/brotli,v1.2.7,MIT,linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64
 github.com/atotto/clipboard,v0.1.4,BSD-3-Clause,linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64
 github.com/aymanbagabas/go-osc52/v2,v2.0.1,MIT,linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64
 github.com/aymerick/douceur,v0.2.0,MIT,linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64
@@ -33,7 +33,7 @@ github.com/guptarohit/asciigraph,v0.10.0,BSD-3-Clause,linux/amd64 linux/arm64 da
 github.com/inconshreveable/mousetrap,v1.1.0,Apache-2.0,windows/amd64 windows/arm64
 github.com/itchyny/gojq,v0.12.19,MIT,linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64
 github.com/itchyny/timefmt-go,v0.1.8,MIT,linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64
-github.com/klauspost/compress,v1.18.7,Apache-2.0 AND BSD-3-Clause AND MIT,linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64
+github.com/klauspost/compress,v1.20.2,Apache-2.0 AND BSD-3-Clause AND MIT,linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64
 github.com/lucasb-eyer/go-colorful,v1.4.1,MIT,linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64
 github.com/mattn/go-colorable,v0.1.14,MIT,linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64
 github.com/mattn/go-isatty,v0.0.20,MIT,linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64

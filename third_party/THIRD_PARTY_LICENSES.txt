@@ -62,7 +62,7 @@ SOFTWARE.
 
 
 ================================================================================
-github.com/andybalholm/brotli v1.1.1 (MIT)
+github.com/andybalholm/brotli v1.2.7 (MIT)
 ================================================================================
 
 --- LICENSE ---
@@ -1919,7 +1919,7 @@ SOFTWARE.
 
 
 ================================================================================
-github.com/klauspost/compress v1.18.7 (Apache-2.0 AND BSD-3-Clause AND MIT)
+github.com/klauspost/compress v1.20.2 (Apache-2.0 AND BSD-3-Clause AND MIT)
 ================================================================================
 
 --- LICENSE ---
