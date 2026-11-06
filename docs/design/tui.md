@@ -351,10 +351,40 @@ error suggesting non-interactive equivalents.
 
 ### Home view (`:home`, default)
 
-A triage landing page, echoing `dt-health-check` / `dt-daily-standup`: active
-problems by severity, unhealthy-SLO count, top services by error rate, recent
-deployment events, failing workflow executions. Panels load independently
-(spinner per panel); `enter` on a panel opens the full view.
+A triage landing page of curated panels (`catalog.HomePanels`), each one
+scoped, limit-capped query that loads independently (spinner per panel):
+
+| id | panel | default window |
+|---|---|---|
+| `problems` | active problems | 24h |
+| `failing-services` | failing services (failed spans) | follows `t` |
+| `k8s-warnings` | Kubernetes warning events | 24h |
+| `frontend-errors` | frontend (RUM) errors | 24h |
+| `vulnerabilities` | open vulnerabilities | 24h |
+| `attacks` | attack detections | 24h |
+
+`enter` on a row opens the full view, pre-filtered, over the panel's window
+(widened to the global one when that is longer, so the row is always in the
+list); `tab`/`j`/`k` move between panels and rows, `ctrl+q` reveals the
+focused panel's query.
+
+**Layout.** A workspace `home.panels` list picks, orders and windows the
+panels (at most six — one query each). Panels sit in the left column
+unless an entry says `column: right`; each column stacks its panels in
+entry order, a layout with no right panel spans the full width, and below
+110 columns everything stacks in entry order. The default home is the six
+panels alternating left and right. Any invalid entry rejects the whole
+layout: the default panels render under a persistent `✗ home config ignored
+— <reason>` banner and the startup line turns red. `dtui workspace validate`
+lists every finding with its line.
+
+**Window honesty** ([ADR-0007](../adr/0007-scope-honesty.md)). Every panel
+title names its window: dim (`· 2h`) when it matches the header, an accent
+`◷ 24h` pill when it differs, and the header adds `· ◷ N panels differ`.
+`t` re-runs only the panels following the global window and the status line
+names the fixed ones. After a drill, the header shows the window the visible
+view actually queries (`◷ last 24h (t: 2h)`) when it differs from the
+global one.
 
 ### The DQL escape hatch (`:query` / `ctrl-q`)
 

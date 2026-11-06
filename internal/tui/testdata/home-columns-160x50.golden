@@ -1,0 +1,50 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                                                           last 2h · ◷ 4 panels differ
+ home ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+╭─ ● open vulnerabilities  ◷ 24h  · 2 ────────────────────────────────────────╮ ╭─ ● active problems  ◷ 7d  · 2 ──────────────────────────────────────────────╮
+│ S-101  9.8 CRITICAL Remote code execution in log4j-core                     │ │ P-260714  19m  CPU saturation · ip-10-0-2-41                                │
+│ S-102  7.5 HIGH     Denial of service in netty-codec-http2                  │ │ P-260709   1h  Failure rate increase · OrderController +1                   │
+│                                                                             │ │                                                                             │
+│                                                                             │ │                                                                             │
+│                                                                             │ │                                                                             │
+│                                                                             │ │                                                                             │
+│                                                                             │ │                                                                             │
+│                                                                             │ │                                                                             │
+│                                                                             │ │                                                                             │
+│                                                                             │ │                                                                             │
+│                                                                             │ │                                                                             │
+│                                                                             │ │                                                                             │
+│                                                                             │ │                                                                             │
+╰─────────────────────────────────────────────────────────────────────────────╯ │                                                                             │
+╭─ ● failing services · 2h · 2 ───────────────────────────────────────────────╮ │                                                                             │
+│ OrderController (shop)                        128 failed spans              │ │                                                                             │
+│ storefront-web                                  7 failed spans              │ │                                                                             │
+│                                                                             │ │                                                                             │
+│                                                                             │ │                                                                             │
+│                                                                             │ │                                                                             │
+│                                                                             │ │                                                                             │
+│                                                                             │ ╰─────────────────────────────────────────────────────────────────────────────╯
+│                                                                             │ ╭─ ● attack detections  ◷ 30d  · 2 ───────────────────────────────────────────╮
+│                                                                             │ │ 11:52:10 SQL_INJECTION  Blocked checkout                                    │
+│                                                                             │ │ 11:20:44 CMD_INJECTION  Monitored cart                                      │
+│                                                                             │ │                                                                             │
+│                                                                             │ │                                                                             │
+│                                                                             │ │                                                                             │
+╰─────────────────────────────────────────────────────────────────────────────╯ │                                                                             │
+╭─ ● kubernetes warnings  ◷ 24h  · 2 ─────────────────────────────────────────╮ │                                                                             │
+│ BackOff                     15×  checkout-7d9f8b6c5d-x2k4q                  │ │                                                                             │
+│ FailedScheduling             2×  cart-5c6d7e8f9a-p9r8s                      │ │                                                                             │
+│                                                                             │ │                                                                             │
+│                                                                             │ │                                                                             │
+│                                                                             │ │                                                                             │
+│                                                                             │ │                                                                             │
+│                                                                             │ │                                                                             │
+│                                                                             │ │                                                                             │
+│                                                                             │ │                                                                             │
+│                                                                             │ │                                                                             │
+│                                                                             │ │                                                                             │
+│                                                                             │ │                                                                             │
+│                                                                             │ │                                                                             │
+╰─────────────────────────────────────────────────────────────────────────────╯ │                                                                             │
+                                                                                ╰─────────────────────────────────────────────────────────────────────────────╯
+ enter open  tab next panel  j/k move  : views  t timeframe  S segments  r refresh  ? help  q quit
+ ≡ dtctl query 'fetch security.events, from:now() - 24h | filter event.type == "VULNERABILITY_STATE_REPORT_EVENT" and event.level == "VULNERABILITY" | sort tim…

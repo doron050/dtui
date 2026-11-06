@@ -60,6 +60,11 @@ type Options struct {
 	// signal view for the session's lifetime. An empty slice means no global
 	// primary-tag columns are active from the workspace.
 	WorkspacePrimaryTags []string
+	// HomePanels is the workspace home layout (nil = the default panels).
+	HomePanels []HomePanelConfig
+	// HomeNotice is why a workspace home layout was rejected; the home view
+	// keeps it on screen above the default layout ("" = none).
+	HomeNotice string
 	// InitialTimeframe is the workspace default window ("" = built-in 2h).
 	InitialTimeframe string
 	// StartupNotice is a one-line message shown on launch — how a committed
@@ -217,6 +222,7 @@ func newApp(opts Options) (*app, error) {
 		qhist:       loadQueryHistory(opts.QueryHistoryPath),
 		primaryTags: opts.WorkspacePrimaryTags,
 	}
+	a.ds.home = homeLayout{panels: opts.HomePanels, notice: opts.HomeNotice}
 	if tf, ok := catalog.ParseTimeframe(opts.InitialTimeframe); ok {
 		a.tf = tf
 	}
@@ -1005,6 +1011,11 @@ func (a *app) setTimeframe(tf catalog.Timeframe) tea.Cmd {
 			cmds = append(cmds, cmd)
 		}
 	}
+	if hv, ok := a.top().(*homeView); ok {
+		if fixed := hv.fixedPanels(); len(fixed) > 0 {
+			cmds = append(cmds, status(fmt.Sprintf("last %s · not following t: %s", tf.Label, strings.Join(fixed, ", "))))
+		}
+	}
 	return tea.Batch(cmds...)
 }
 
@@ -1060,7 +1071,7 @@ func (a *app) renderHeader() string {
 	if iv := refreshIntervals[a.refreshIdx]; iv > 0 {
 		right = append(right, theme.StatusOK.Render("⟳ "+iv.String()))
 	}
-	right = append(right, theme.HeaderKey.Render("last ")+theme.HeaderVal.Render(a.tf.Label))
+	right = append(right, a.headerWindow())
 
 	l := strings.Join(left, sep)
 	r := strings.Join(right, sep) + " "
@@ -1091,6 +1102,34 @@ func (a *app) renderHeader() string {
 		}
 	}
 	return line1 + "\n" + ansi.Truncate(line2, a.width, "…")
+}
+
+// windowProvider is implemented by views whose query window can differ from
+// the global one (a home jump carries the panel's 24h).
+type windowProvider interface {
+	Window() catalog.Timeframe
+}
+
+// headerWindow renders the header's window. It names the window the visible
+// view actually queries, so a drill that carried another window never sits
+// under a header claiming the global one (ADR-0007).
+func (a *app) headerWindow() string {
+	global := theme.HeaderKey.Render("last ") + theme.HeaderVal.Render(a.tf.Label)
+	switch v := a.top().(type) {
+	case *homeView:
+		if n := v.differing(); n > 0 {
+			noun := "panels"
+			if n == 1 {
+				noun = "panel"
+			}
+			return global + theme.Dim.Render(fmt.Sprintf(" · ◷ %d %s differ", n, noun))
+		}
+	case windowProvider:
+		if tf := v.Window(); tf.Label != "" && tf.DQL() != a.tf.DQL() {
+			return theme.Badge.Render("◷ last "+tf.Label) + theme.Dim.Render(" (t: "+a.tf.Label+")")
+		}
+	}
+	return global
 }
 
 func (a *app) renderBody() string {

@@ -222,6 +222,7 @@ fish_add_path (go env GOPATH)/bin
 dtui                  # home triage view on the current context
 dtui pods             # jump straight into a view
 dtui --context prod   # session-local override, never persisted
+dtui workspace validate   # check the project's .dtui.yaml (no tenant needed)
 ```
 
 Press `?` inside the TUI for the full key reference, `:` to browse views, and
@@ -293,6 +294,21 @@ segments:
       environment: [production]    # list of values per variable name
     primary-tags:                   # extra columns, active only with this segment
       - payment-region
+
+# home — the home screen's panels (max 6). Each entry is a panel id or a map:
+# column: right puts it in the right column (left is the default; each
+# column lists its panels top to bottom in entry order), timeframe:
+# <n>m/<n>h/<n>d pins its window, `global` makes it follow the header
+# window (`t`). Omit the block for the default six panels.
+home:
+  panels:
+    - problems                     # curated default window (24h)
+    - panel: vulnerabilities
+      column: right
+      timeframe: 7d                # pinned: shown as ◷ 7d when it differs
+    - panel: failing-services
+      timeframe: global            # follows t; left, under problems
+    - k8s-warnings
 ```
 
 | Key | Type | Description |
@@ -306,11 +322,40 @@ segments:
 | `segments[].segment` | string | Segment name or UID. Required in the map form (the bare-string form sets only this). Unknown or ambiguous names warn instead of guessing. |
 | `segments[].variables` | map of lists | Pre-bound values for the segment's variables; each variable needs at least one value. |
 | `segments[].primary-tags` | list of strings | Extra tag columns for this segment, added to the global `primary-tags` (up to 5 per list). |
+| `home.panels` | list | Up to 6 home panels, no duplicates; entry order is the order within each column and for `tab`. Ids: `problems`, `failing-services`, `k8s-warnings`, `frontend-errors`, `vulnerabilities`, `attacks`. |
+| `home.panels[].panel` | string | Panel id. Required in the map form (the bare-string form sets only this). |
+| `home.panels[].column` | string | `left` (default) or `right`. With no right panel, every panel spans the full width; below 110 terminal columns all panels stack in entry order. |
+| `home.panels[].timeframe` | string | `<n>m`, `<n>h`, `<n>d`, or `global` (follow `t`). Default: the panel's curated window. |
 
 </details>
 
-Unknown keys are ignored, so a newer committed file still works on an older
-dtui. Values are used verbatim — there is no environment-variable expansion,
+Unknown top-level keys are ignored, so a newer committed file still works on
+an older dtui. The `home` block is strict: an unknown key, id or timeframe,
+a duplicate, or an empty list rejects the whole layout — dtui then shows the
+default home under a red `✗ home config ignored` banner, and every other key
+still applies.
+
+### Validating the file
+
+```console
+$ dtui workspace validate          # discovers .dtui.yaml like a launch does
+$ dtui workspace validate ./svc/.dtui.yaml
+/home/me/svc/.dtui.yaml
+
+  ✓ version       1
+  ✓ timeframe     2h
+  ✗ home          rejected — dtui shows the default home layout with a warning
+      line 7   home.panels[1]: unknown panel "vulns" — available: problems, failing-services, …
+      line 9   home.panels[2].timeframe: "2w" — expected <n>m, <n>h, <n>d (e.g. 7d) or "global"
+  ! line 3   colour: unknown key — ignored by this build
+  …
+✗ 2 errors, 1 warning — dtui applies the rest of the file
+```
+
+It prints what dtui will do with each key and the resulting home layout
+(each panel's window, and whether it follows `t`), and exits non-zero when
+dtui would ignore any part of the file. It runs offline: segment names and
+the environment are resolved only at launch. Values are used verbatim — there is no environment-variable expansion,
 so a committed file behaves the same on every machine.
 
 Guarantees: the file carries **no credentials, contexts, or executable keys**

@@ -63,7 +63,9 @@ can't do both is incomplete.
 4. **Zero configuration** ([ADR-0010](../adr/0010-curated-defaults-runtime-discovery.md)).
    dtui works on an arbitrary tenant out of the box: curated defaults plus
    runtime discovery, never per-user setup. Configuration surface *is*
-   scope — no skins, no plugin system, no keybinding remapping.
+   scope — no skins, no plugin system, no keybinding remapping. Choosing
+   which curated home panels a project lands on, and the window each one
+   looks back over, is scope: ids from the panel catalog, never queries.
 5. **Honesty** ([ADR-0007](../adr/0007-scope-honesty.md)). Never claim a
    scope the query didn't apply, never render silent emptiness as truth,
    and surface cost instead of hiding it.
@@ -114,7 +116,10 @@ one place:
   no alerting, no notifications, no wallboard mode, no background polling
   beyond view auto-refresh.
 - **No customization surface** — no plugin system, no themes/skins, no user
-  keybinding remapping. Every knob is maintenance tail.
+  keybinding remapping. Every knob is maintenance tail. The `.dtui.yaml`
+  home layout is not an exception: it selects and orders curated panels and
+  sets their lookback, the same narrowing every workspace key does — no
+  free-form DQL, no per-panel presentation knobs.
 - **No report or export pipelines** — `y` yanks a value; anything more is
   dtctl's output layer.
 - **Not a compatibility layer over every platform era** — bridge the

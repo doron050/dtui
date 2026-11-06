@@ -1,0 +1,40 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                    last 2h · ◷ 1 panel differ
+ home ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+╭─ ● active problems · 2h · 2 ────────────────────────────────────────────────────────────────────────────────────────╮
+│ P-260714  19m  CPU saturation · ip-10-0-2-41                                                                        │
+│ P-260709   1h  Failure rate increase · OrderController +1                                                           │
+│                                                                                                                     │
+│                                                                                                                     │
+│                                                                                                                     │
+│                                                                                                                     │
+│                                                                                                                     │
+│                                                                                                                     │
+│                                                                                                                     │
+│                                                                                                                     │
+│                                                                                                                     │
+│                                                                                                                     │
+│                                                                                                                     │
+│                                                                                                                     │
+│                                                                                                                     │
+│                                                                                                                     │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ ● frontend errors  ◷ 7d  · 2 ──────────────────────────────────────────────────────────────────────────────────────╮
+│    42×  TypeError: Cannot read properties of undefined (reading 'id') · storefront                                  │
+│     9×  NetworkError when attempting to fetch resource. · storefront                                                │
+│                                                                                                                     │
+│                                                                                                                     │
+│                                                                                                                     │
+│                                                                                                                     │
+│                                                                                                                     │
+│                                                                                                                     │
+│                                                                                                                     │
+│                                                                                                                     │
+│                                                                                                                     │
+│                                                                                                                     │
+│                                                                                                                     │
+│                                                                                                                     │
+│                                                                                                                     │
+│                                                                                                                     │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ enter open  tab next panel  j/k move  : views  t timeframe  S segments  r refresh  ? help  q quit
+ ≡ dtctl query 'fetch dt.davis.problems, from:now() - 2h | filter not(dt.davis.is_duplicate) | sort timestamp asc | sum…

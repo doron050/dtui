@@ -1,0 +1,24 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly           last 2h · ◷ 5 panels differ
+ home ─────────────────────────────────────────────────────────────────────────
+✗ home config ignored — home.panels[1]: unknown panel "vulns" (line 5) · defaul…
+╭─ ● active problems  ◷ 24h  · 2 ─────────────────────────────────────────────╮
+│ P-260714  19m  CPU saturation · ip-10-0-2-41                                │
+│ P-260709   1h  Failure rate increase · OrderController +1                   │
+╰─────────────────────────────────────────────────────────────────────────────╯
+╭─ ● failing services · 2h · 2 ───────────────────────────────────────────────╮
+│ OrderController (shop)                        128 failed spans              │
+│ storefront-web                                  7 failed spans              │
+╰─────────────────────────────────────────────────────────────────────────────╯
+╭─ ● kubernetes warnings  ◷ 24h  · 2 ─────────────────────────────────────────╮
+│ BackOff                     15×  checkout-7d9f8b6c5d-x2k4q                  │
+│ FailedScheduling             2×  cart-5c6d7e8f9a-p9r8s                      │
+╰─────────────────────────────────────────────────────────────────────────────╯
+╭─ ● frontend errors  ◷ 24h  · 2 ─────────────────────────────────────────────╮
+│    42×  TypeError: Cannot read properties of undefined (reading 'id') · st… │
+│     9×  NetworkError when attempting to fetch resource. · storefront        │
+╰─────────────────────────────────────────────────────────────────────────────╯
+╭─ ● open vulnerabilities  ◷ 24h  · 2 ────────────────────────────────────────╮
+│ S-101  9.8 CRITICAL Remote code execution in log4j-core                     │
+│ S-102  7.5 HIGH     Denial of service in netty-codec-http2                  │
+ enter open  tab next panel  j/k move  : views  t timeframe  S segments  r refr…
+ ≡ dtctl query 'fetch dt.davis.problems, from:now() - 24h | filter not(dt.davis…

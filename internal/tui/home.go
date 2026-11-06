@@ -2,9 +2,8 @@ package tui
 
 import (
 	"fmt"
-	"sort"
+	"strconv"
 	"strings"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -14,36 +13,85 @@ import (
 	"github.com/dynatrace-oss/dtui/internal/tui/theme"
 )
 
-// homeView is the triage landing page: active problems, failing services,
-// Kubernetes warnings, and open vulnerabilities, each loading independently.
-// enter on a row jumps into the corresponding full view, pre-filtered.
+// HomePanelConfig is one configured home panel (.dtui.yaml home.panels):
+// a catalog.HomePanel id, an optional window override ("7d", or
+// catalog.HomeFollowGlobal) and its column.
+type HomePanelConfig struct {
+	ID        string
+	Timeframe string
+	Right     bool // right column; the left one is the default
+}
+
+// homeWideMin is the width from which the two home columns sit side by side.
+const homeWideMin = 110
+
+// DefaultHomePanels is the zero-config home: the curated panels alternating
+// left and right, so they pair up row by row.
+func DefaultHomePanels() []HomePanelConfig {
+	out := make([]HomePanelConfig, len(catalog.HomePanels))
+	for i, def := range catalog.HomePanels {
+		out[i] = HomePanelConfig{ID: def.ID, Right: i%2 == 1}
+	}
+	return out
+}
+
+// HomeColumns splits panels into rendered columns of panel indices, each in
+// entry order: left then right. With no right panel, or on a narrow
+// terminal (wide = false), every panel stacks in one full-width column.
+func HomeColumns(panels []HomePanelConfig, wide bool) [][]int {
+	var left, right, all []int
+	for i, p := range panels {
+		all = append(all, i)
+		if p.Right {
+			right = append(right, i)
+		} else {
+			left = append(left, i)
+		}
+	}
+	if !wide || len(left) == 0 || len(right) == 0 {
+		return [][]int{all}
+	}
+	return [][]int{left, right}
+}
+
+// homeLayout is the session's home configuration: the configured panels
+// (nil = the default layout) and, when a configuration was rejected, the
+// reason the home view keeps on screen.
+type homeLayout struct {
+	panels []HomePanelConfig
+	notice string
+}
+
+// homeView is the triage landing page: curated catalog.HomePanels, each
+// loading independently. enter on a row jumps into the corresponding full
+// view, pre-filtered.
 type homeView struct {
 	ds *dataSource
-	tf catalog.Timeframe
+	tf catalog.Timeframe // the global window
 
 	panels []*homePanel
-	focus  int // panel index owning the cursor
-	cursor int // line index within the focused panel
-	seq    int // refresh generation — drops stale in-flight results
+	notice string // rejected-configuration banner ("" = none)
+	focus  int    // panel index owning the cursor
+	cursor int    // line index within the focused panel
+	seq    int    // refresh generation; each panel keeps the one it last fired
 
 	width, height int
 }
 
 type homePanel struct {
-	title  string
-	dot    string // pre-styled severity dot shown in the panel title
-	query  func(tf catalog.Timeframe) string
-	line   func(rec map[string]any) (text, class string)
-	action func(rec map[string]any, tf catalog.Timeframe) tea.Msg
-	// entity derives the row's Smartscape entity for the global actions
-	// (pin, x/X, o) — nil for panels whose rows carry none.
-	entity func(rec map[string]any) *catalog.Entity
-	// yank names the row's most copyable identity (display id, error name).
-	yank    func(rec map[string]any) string
-	records []map[string]any
-	loading bool
-	err     error
-	dql     string
+	def      *catalog.HomePanel
+	override string // configured window ("" = curated default)
+	right    bool   // right column
+	records  []map[string]any
+	loading  bool
+	err      error
+	dql      string
+	seq      int // generation of the in-flight query — drops stale results
+}
+
+// window is the panel's effective window and whether it ignores `t`.
+func (p *homePanel) window(global catalog.Timeframe) (catalog.Timeframe, bool) {
+	return catalog.HomeWindow(p.def, p.override, global)
 }
 
 // panelOwner routes dataMsg results to one panel.
@@ -53,206 +101,15 @@ type panelOwner struct {
 }
 
 func newHomeView(ds *dataSource, tf catalog.Timeframe) *homeView {
-	v := &homeView{ds: ds, tf: tf}
-	v.panels = []*homePanel{
-		{
-			title: "active problems (24h)",
-			dot:   theme.Class("error", "●"),
-			query: func(catalog.Timeframe) string {
-				return `fetch dt.davis.problems, from:now() - 24h
-| filter not(dt.davis.is_duplicate)
-| sort timestamp asc
-| summarize { status = takeLast(event.status), name = takeLast(event.name), start = takeLast(event.start), affected = takeLast(affected_entity_names) }, by:{display_id}
-| filter status == "ACTIVE"
-| sort start desc
-| limit 8`
-			},
-			line: func(rec map[string]any) (string, string) {
-				affected := ""
-				if names, _ := rec["affected"].([]any); len(names) > 0 {
-					affected = " · " + catalog.FormatValue(names[0])
-					if len(names) > 1 {
-						affected += fmt.Sprintf(" +%d", len(names)-1)
-					}
-				}
-				return fmt.Sprintf("%-8s %4s  %s%s",
-					catalog.Str(rec, "display_id"), catalog.Age(catalog.Str(rec, "start")),
-					catalog.Str(rec, "name"), affected), "error"
-			},
-			action: func(rec map[string]any, tf catalog.Timeframe) tea.Msg {
-				// The panel looks back 24h — the jump must too, or an ACTIVE
-				// problem last touched over the shorter window ago filters to
-				// an empty "no rows match" state.
-				day := catalog.Timeframe{Label: "24h", Dur: 24 * time.Hour}
-				if tf.Dur > day.Dur {
-					day = tf
-				}
-				return pushViewMsg{spec: catalog.Lookup("problems"),
-					scope: catalog.Scope{Timeframe: day}, filter: catalog.Str(rec, "display_id")}
-			},
-			yank: func(rec map[string]any) string { return catalog.Str(rec, "display_id") },
-		},
-		{
-			title: "failing services",
-			dot:   theme.SeriesAt(3).Render("●"),
-			query: func(tf catalog.Timeframe) string {
-				return fmt.Sprintf(`fetch spans, from:%s
-| filter request.is_failed == true and isNotNull(dt.smartscape.service)
-| summarize failed = count(), svc = takeFirst(coalesce(dt.service.name, service.name)), ns = takeFirst(k8s.namespace.name), by:{dt.smartscape.service}
-| sort failed desc
-| limit 8`, tf.DQL())
-			},
-			line: func(rec map[string]any) (string, string) {
-				svc := catalog.Str(rec, "svc")
-				if ns := catalog.Str(rec, "ns"); ns != "" {
-					svc += " (" + ns + ")"
-				}
-				return fmt.Sprintf("%-42s %6s failed spans", svc, catalog.Str(rec, "failed")), "warn"
-			},
-			action: func(rec map[string]any, tf catalog.Timeframe) tea.Msg {
-				id := catalog.Str(rec, "dt.smartscape.service")
-				if id == "" {
-					return pushViewMsg{spec: catalog.Lookup("services"), scope: catalog.Scope{Timeframe: tf}}
-				}
-				entity := catalog.Entity{ID: id, Name: catalog.Str(rec, "svc"), Type: "SERVICE"}
-				return detailMsg{entity: entity}
-			},
-			entity: func(rec map[string]any) *catalog.Entity {
-				id := catalog.Str(rec, "dt.smartscape.service")
-				if id == "" {
-					return nil
-				}
-				return &catalog.Entity{ID: id, Name: catalog.Str(rec, "svc"), Type: "SERVICE"}
-			},
-			yank: func(rec map[string]any) string { return catalog.Str(rec, "dt.smartscape.service") },
-		},
-		{
-			title: "kubernetes warnings (24h)",
-			dot:   theme.Class("warn", "●"),
-			// The dt.kubernetes.events METRIC is deliberately the backend here:
-			// K8s warning events (FailedScheduling, FailedMount, …) are not
-			// ingested into `fetch events` on real tenants (validated live —
-			// no k8s.event.reason rows exist there), so the metric is the only
-			// record of them.
-			query: func(catalog.Timeframe) string {
-				return `timeseries events = sum(dt.kubernetes.events, default: 0), by:{k8s.pod.name, k8s.event.reason}, from:now() - 24h, interval: 1h, filter: { k8s.event.type == "Warning" }
-| limit 100`
-			},
-			line: func(rec map[string]any) (string, string) {
-				total := 0.0
-				for _, p := range catalog.FloatSeries(rec["events"]) {
-					total += p
-				}
-				return fmt.Sprintf("%-24s %5.0f×  %s",
-					catalog.Str(rec, "k8s.event.reason"), total, catalog.Str(rec, "k8s.pod.name")), "warn"
-			},
-			action: func(rec map[string]any, tf catalog.Timeframe) tea.Msg {
-				// The panel looks back 24h — the jump must too, and the pod
-				// name goes into the query itself: a client-side filter
-				// could miss a pod cut from the limit-capped page.
-				day := catalog.Timeframe{Label: "24h", Dur: 24 * time.Hour}
-				if tf.Dur > day.Dur {
-					day = tf
-				}
-				pod := &catalog.Entity{Name: catalog.Str(rec, "k8s.pod.name"), Type: "K8S_POD"}
-				return pushViewMsg{spec: catalog.Lookup("pods"),
-					scope: catalog.Scope{Timeframe: day, Entity: pod}}
-			},
-			yank: func(rec map[string]any) string { return catalog.Str(rec, "k8s.pod.name") },
-		},
-		{
-			title: "frontend errors (24h)",
-			dot:   theme.SeriesAt(1).Render("●"),
-			query: func(catalog.Timeframe) string {
-				return `fetch user.events, from:now() - 24h
-| filter characteristics.classifier == "error"
-| summarize count = count(), app = takeFirst(frontend.name), by:{error.display_name}
-| sort count desc
-| limit 8`
-			},
-			line: func(rec map[string]any) (string, string) {
-				return fmt.Sprintf("%5s×  %s · %s",
-					catalog.Str(rec, "count"), catalog.Str(rec, "error.display_name"),
-					catalog.Str(rec, "app")), "warn"
-			},
-			action: func(rec map[string]any, tf catalog.Timeframe) tea.Msg {
-				// The panel looks back 24h — the jump must too. Lens 1 is the
-				// userevents errors lens; the error name narrows client-side.
-				day := catalog.Timeframe{Label: "24h", Dur: 24 * time.Hour}
-				if tf.Dur > day.Dur {
-					day = tf
-				}
-				return pushViewMsg{spec: catalog.Lookup("userevents"),
-					scope:  catalog.Scope{Timeframe: day, Lens: 1},
-					filter: catalog.Str(rec, "error.display_name")}
-			},
-			yank: func(rec map[string]any) string { return catalog.Str(rec, "error.display_name") },
-		},
-		{
-			title: "open vulnerabilities (24h)",
-			dot:   theme.SeriesAt(2).Render("●"),
-			query: func(catalog.Timeframe) string {
-				// VULNERABILITY level only — entity-level rows would pollute
-				// the rollup (same filter as the vulnerabilities view).
-				return `fetch security.events, from:now() - 24h
-| filter event.type == "VULNERABILITY_STATE_REPORT_EVENT" and event.level == "VULNERABILITY"
-| sort timestamp asc
-| summarize { title = takeLast(vulnerability.title), display_id = takeLast(vulnerability.display_id), level = takeLast(vulnerability.risk.level), score = takeLast(vulnerability.risk.score), status = takeLast(vulnerability.resolution.status), muted = takeLast(vulnerability.mute.status) }, by:{vulnerability.id}
-| filter status == "OPEN" and muted != "MUTED"
-| sort score desc
-| limit 8`
-			},
-			line: func(rec map[string]any) (string, string) {
-				level := catalog.Str(rec, "level")
-				return fmt.Sprintf("%-5s %4s %-8s %s",
-					catalog.Str(rec, "display_id"), catalog.FormatScore(rec["score"]), level,
-					catalog.Str(rec, "title")), classRisk(level)
-			},
-			action: func(rec map[string]any, tf catalog.Timeframe) tea.Msg {
-				return pushViewMsg{spec: catalog.Lookup("vulnerabilities"),
-					scope: catalog.Scope{Timeframe: tf}, filter: catalog.Str(rec, "display_id")}
-			},
-			yank: func(rec map[string]any) string { return catalog.Str(rec, "display_id") },
-		},
-		{
-			title: "attack detections (24h)",
-			dot:   theme.SeriesAt(4).Render("●"),
-			query: func(catalog.Timeframe) string {
-				return `fetch security.events, from:now() - 24h
-| filter event.type == "DETECTION_FINDING" and product.name == "Runtime Application Protection"
-| sort timestamp desc
-| limit 8`
-			},
-			line: func(rec map[string]any) (string, string) {
-				action := catalog.Str(rec, "finding.action")
-				class := "warn"
-				if action == "Blocked" {
-					class = "ok"
-				}
-				return fmt.Sprintf("%-5s %-14s %-7s %s",
-					catalog.FormatTime(catalog.Str(rec, "timestamp")), catalog.Str(rec, "finding.type"),
-					action, catalog.Str(rec, "k8s.workload.name")), class
-			},
-			action: func(rec map[string]any, tf catalog.Timeframe) tea.Msg {
-				// The panel looks back 24h — the jump must too, or a finding
-				// older than the shorter window filters to an empty list.
-				day := catalog.Timeframe{Label: "24h", Dur: 24 * time.Hour}
-				if tf.Dur > day.Dur {
-					day = tf
-				}
-				return pushViewMsg{spec: catalog.Lookup("attacks"),
-					scope: catalog.Scope{Timeframe: day}, filter: catalog.Str(rec, "finding.id")}
-			},
-			entity: func(rec map[string]any) *catalog.Entity {
-				id := catalog.Str(rec, "dt.smartscape_source.id")
-				if id == "" {
-					return nil
-				}
-				return &catalog.Entity{ID: id, Name: catalog.Str(rec, "k8s.workload.name"),
-					Type: catalog.Str(rec, "dt.smartscape_source.type")}
-			},
-			yank: func(rec map[string]any) string { return catalog.Str(rec, "finding.id") },
-		},
+	v := &homeView{ds: ds, tf: tf, notice: ds.home.notice}
+	cfgs := ds.home.panels
+	if len(cfgs) == 0 {
+		cfgs = DefaultHomePanels()
+	}
+	for _, c := range cfgs {
+		if def := catalog.LookupHomePanel(c.ID); def != nil {
+			v.panels = append(v.panels, &homePanel{def: def, override: c.Timeframe, right: c.Right})
+		}
 	}
 	return v
 }
@@ -266,8 +123,8 @@ func (v *homeView) Selection() (map[string]any, *catalog.Entity) {
 		return nil, nil
 	}
 	rec := p.records[v.cursor]
-	if p.entity != nil {
-		return rec, p.entity(rec)
+	if p.def.Entity != nil {
+		return rec, p.def.Entity(rec)
 	}
 	return rec, nil
 }
@@ -275,37 +132,36 @@ func (v *homeView) Selection() (map[string]any, *catalog.Entity) {
 // YankText copies the focused row's most specific identity (the global 'y').
 func (v *homeView) YankText() (string, string, bool) {
 	p := v.panels[v.focus]
-	if v.cursor >= len(p.records) || p.yank == nil {
+	if v.cursor >= len(p.records) || p.def.Yank == nil {
 		return "", "", false
 	}
-	text := p.yank(p.records[v.cursor])
+	text := p.def.Yank(p.records[v.cursor])
 	if text == "" {
 		return "", "", false
 	}
 	return text, text, true
 }
 
-func classRisk(level string) string {
-	switch level {
-	case "CRITICAL":
-		return "error"
-	case "HIGH":
-		return "warn"
-	}
-	return "dim"
-}
+func classRisk(level string) string { return catalog.RiskClass(level) }
 
 func (v *homeView) Init() tea.Cmd { return v.Refresh() }
 
-func (v *homeView) Refresh() tea.Cmd {
+func (v *homeView) Refresh() tea.Cmd { return v.refresh(false) }
+
+// refresh re-runs the panels — only those following the global window when
+// globalOnly (a `t` change leaves fixed-window panels untouched).
+func (v *homeView) refresh(globalOnly bool) tea.Cmd {
 	v.seq++
 	var cmds []tea.Cmd
 	for i, p := range v.panels {
+		tf, fixed := p.window(v.tf)
+		if globalOnly && fixed {
+			continue
+		}
 		p.loading = true
 		p.err = nil
-		p.dql = p.query(v.tf)
-		// panelOwner.idx routes to the panel; the query seq is the refresh
-		// generation, so a slow result from a superseded refresh is dropped.
+		p.seq = v.seq
+		p.dql = p.def.Query(catalog.Scope{Timeframe: tf})
 		cmds = append(cmds, v.ds.query(panelOwner{v: v, idx: i}, v.seq, p.dql))
 	}
 	return tea.Batch(cmds...)
@@ -313,7 +169,31 @@ func (v *homeView) Refresh() tea.Cmd {
 
 func (v *homeView) SetTimeframe(tf catalog.Timeframe) tea.Cmd {
 	v.tf = tf
-	return v.Refresh()
+	return v.refresh(true)
+}
+
+// fixedPanels names the panels that ignore `t`, with their windows
+// ("problems 24h").
+func (v *homeView) fixedPanels() []string {
+	var out []string
+	for _, p := range v.panels {
+		if tf, fixed := p.window(v.tf); fixed {
+			out = append(out, p.def.ID+" "+tf.Label)
+		}
+	}
+	return out
+}
+
+// differing counts the panels whose window is not the header's — the ones
+// whose title carries the ◷ pill.
+func (v *homeView) differing() int {
+	n := 0
+	for _, p := range v.panels {
+		if tf, _ := p.window(v.tf); tf.DQL() != v.tf.DQL() {
+			n++
+		}
+	}
+	return n
 }
 
 func (v *homeView) InputActive() bool { return false }
@@ -350,7 +230,7 @@ func (v *homeView) Update(msg tea.Msg) tea.Cmd {
 
 	case dataMsg:
 		po, ok := msg.owner.(panelOwner)
-		if !ok || po.v != v || po.idx >= len(v.panels) || msg.seq != v.seq {
+		if !ok || po.v != v || po.idx >= len(v.panels) || msg.seq != v.panels[po.idx].seq {
 			return nil
 		}
 		p := v.panels[po.idx]
@@ -358,13 +238,8 @@ func (v *homeView) Update(msg tea.Msg) tea.Cmd {
 		p.err = msg.err
 		if msg.err == nil {
 			p.records = msg.records
-			if po.idx == 2 { // k8s warnings: order by total occurrences
-				sort.SliceStable(p.records, func(i, j int) bool {
-					return seriesTotal(p.records[i], "events") > seriesTotal(p.records[j], "events")
-				})
-				if len(p.records) > 8 {
-					p.records = p.records[:8]
-				}
+			if p.def.Post != nil {
+				p.records = p.def.Post(p.records)
 			}
 		}
 		return nil
@@ -373,14 +248,6 @@ func (v *homeView) Update(msg tea.Msg) tea.Cmd {
 		return v.handleKey(msg)
 	}
 	return nil
-}
-
-func seriesTotal(rec map[string]any, key string) float64 {
-	total := 0.0
-	for _, p := range catalog.FloatSeries(rec[key]) {
-		total += p
-	}
-	return total
 }
 
 func (v *homeView) handleKey(msg tea.KeyMsg) tea.Cmd {
@@ -399,11 +266,22 @@ func (v *homeView) handleKey(msg tea.KeyMsg) tea.Cmd {
 		p := v.panels[v.focus]
 		if v.cursor < len(p.records) {
 			rec := p.records[v.cursor]
-			action, tf := p.action, v.tf
-			return func() tea.Msg { return action(rec, tf) }
+			// The jump carries the panel's window (widened to the global
+			// one), or the selected row could filter to an empty list.
+			tf, _ := p.window(v.tf)
+			j := p.def.Jump(rec, catalog.Scope{Timeframe: catalog.HomeJumpWindow(tf, v.tf)})
+			return func() tea.Msg { return homeJumpMsg(j) }
 		}
 	}
 	return nil
+}
+
+// homeJumpMsg turns a catalog.HomeJump into the app's navigation message.
+func homeJumpMsg(j catalog.HomeJump) tea.Msg {
+	if j.Detail != nil {
+		return detailMsg{entity: *j.Detail}
+	}
+	return pushViewMsg{spec: catalog.Lookup(j.View), scope: j.Scope, filter: j.Filter}
 }
 
 // moveCursor walks lines within the focused panel and rolls over to the
@@ -424,46 +302,67 @@ func (v *homeView) moveCursor(delta int) {
 func (v *homeView) View(width, height int) string {
 	v.width, v.height = width, height
 
-	cols := 1
-	if width >= 110 {
-		cols = 2
-	}
-	rows := (len(v.panels) + cols - 1) / cols
-	panelW := width/cols - 1
-	panelH := height / rows
-	if panelH < 4 {
-		panelH = 4
+	var banner string
+	if v.notice != "" {
+		banner = ansi.Truncate(theme.Error.Render("✗ home config ignored — "+v.notice)+
+			theme.Dim.Render(" · default layout shown · check with: dtui workspace validate"), width, "…")
+		height--
 	}
 
-	rendered := make([]string, len(v.panels))
+	cfgs := make([]HomePanelConfig, len(v.panels))
 	for i, p := range v.panels {
-		rendered[i] = v.renderPanel(i, p, panelW, panelH)
+		cfgs[i] = HomePanelConfig{ID: p.def.ID, Right: p.right}
+	}
+	cols := HomeColumns(cfgs, width >= homeWideMin)
+	panelW := width/len(cols) - 1
+	blocks := make([]string, len(cols))
+	for c, col := range cols {
+		panelH := maxInt(height/len(col), 4)
+		stack := make([]string, len(col))
+		for r, idx := range col {
+			stack[r] = v.renderPanel(idx, v.panels[idx], panelW, panelH)
+		}
+		blocks[c] = strings.Join(stack, "\n")
 	}
 
 	var out []string
-	for r := 0; r < rows; r++ {
-		var line []string
-		for c := 0; c < cols; c++ {
-			idx := r*cols + c
-			if idx < len(rendered) {
-				line = append(line, rendered[idx])
-			}
-		}
-		out = append(out, joinHorizontal(line, panelW))
+	if banner != "" {
+		out = append(out, banner)
 	}
+	out = append(out, joinHorizontal(blocks, panelW))
 	return strings.Join(out, "\n")
+}
+
+// panelDot renders a catalog.HomePanel.Dot color ("error", "series:3").
+func panelDot(color string) string {
+	if n, ok := strings.CutPrefix(color, "series:"); ok {
+		i, _ := strconv.Atoi(n)
+		return theme.SeriesAt(i).Render("●")
+	}
+	return theme.Class(color, "●")
+}
+
+// windowLabel is the panel title's window: dim when it is the header's
+// window, a ◷ pill when it differs — the title never hides that a panel
+// looks at another window than the header claims (ADR-0007).
+func (v *homeView) windowLabel(p *homePanel) string {
+	tf, _ := p.window(v.tf)
+	if tf.DQL() == v.tf.DQL() {
+		return theme.Dim.Render("· " + tf.Label)
+	}
+	return theme.Badge.Render("◷ " + tf.Label)
 }
 
 // renderPanel draws one panel as a rounded box with the title embedded in the
 // top border; the focused panel's border lights up in the accent color.
 func (v *homeView) renderPanel(idx int, p *homePanel, width, height int) string {
 	border := theme.PanelBlur
-	title := theme.PanelTitle2.Render(p.title)
+	title := theme.PanelTitle2.Render(p.def.Title)
 	if idx == v.focus {
 		border = theme.PanelFocus
-		title = theme.PanelTitle.Render(p.title)
+		title = theme.PanelTitle.Render(p.def.Title)
 	}
-	head := p.dot + " " + title
+	head := panelDot(p.def.Dot) + " " + title + " " + v.windowLabel(p)
 	if !p.loading && p.err == nil && len(p.records) > 0 {
 		head += theme.Dim.Render(fmt.Sprintf(" · %d", len(p.records)))
 	}
@@ -488,8 +387,8 @@ func (v *homeView) renderPanel(idx int, p *homePanel, width, height int) string 
 			if len(body) >= height-2 {
 				break
 			}
-			text, class := p.line(rec)
-			text = ansi.Truncate(text, innerW, "…")
+			text, class := p.def.Line(rec)
+			text = ansi.Truncate(catalog.SafeText(text), innerW, "…")
 			if idx == v.focus && li == v.cursor {
 				text = theme.Selected.Render(pad(text, innerW))
 			} else if class != "" {

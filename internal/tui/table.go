@@ -417,6 +417,9 @@ func (v *tableView) SetTimeframe(tf catalog.Timeframe) tea.Cmd {
 	return v.Refresh()
 }
 
+// Window is the window the list query composes (windowProvider).
+func (v *tableView) Window() catalog.Timeframe { return v.scope.Timeframe }
+
 func (v *tableView) InputActive() bool { return v.filtering || v.facetMode != facetOff }
 
 // Busy reports whether the list query is in flight (animates the spinner).

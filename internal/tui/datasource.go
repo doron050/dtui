@@ -51,6 +51,10 @@ type dataSource struct {
 	// have no segment parameter).
 	segments []exec.FilterSegmentRef
 
+	// home is the session's home layout (.dtui.yaml home block); it
+	// survives context switches like the rest of the workspace scope.
+	home homeLayout
+
 	// previewOff inverts the app-wide peek-pane preference (the P toggle).
 	// It rides on the shared dataSource — the one object every view already
 	// holds — so panes nested inside detail tabs and views pushed later
