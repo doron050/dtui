@@ -214,16 +214,16 @@ type Column struct {
 // Text returns the formatted cell value for a record.
 func (c Column) Text(rec map[string]any) string {
 	if c.Value != nil {
-		return c.Value(rec)
+		return SafeText(c.Value(rec))
 	}
-	return FormatValue(rec[c.Field])
+	return SafeText(FormatValue(rec[c.Field]))
 }
 
 // TextAt returns the formatted cell value for a record given the display
 // width it will render in (ValueW when set, Text otherwise).
 func (c Column) TextAt(rec map[string]any, width int) string {
 	if c.ValueW != nil {
-		return c.ValueW(rec, width)
+		return SafeText(c.ValueW(rec, width))
 	}
 	return c.Text(rec)
 }
