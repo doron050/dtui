@@ -24,6 +24,7 @@ can read in two minutes.
 | [0014](0014-breadth-not-depth.md) | Breadth across nouns, capped depth; render to decide |
 | [0015](0015-provider-adaptive-cloud-columns-and-id-name-enrichment.md) | Provider-adaptive cloud columns; session-cached ID→name enrichment |
 | [0016](0016-detail-panes-show-real-grail-keys.md) | Detail panes show real Grail keys; app-derived values are labeled, not disguised |
+| [0017](0017-configurable-home-is-scope.md) | A configurable home layout is scope, not customization |
 
 New ADRs: next number, same three sections, `Accepted`/`Superseded` status.
 Record a decision when reversing it would ripple through more than one view.

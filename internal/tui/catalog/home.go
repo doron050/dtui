@@ -7,8 +7,9 @@ import (
 	"time"
 )
 
-// MaxHomePanels caps a configured home layout: one scoped query per panel
-// (ADR-0013), and the two-column grid stays readable.
+// MaxHomePanels caps the panel catalog: one scoped query per panel
+// (ADR-0013), and the two-column grid stays readable. A configured layout
+// can list each panel once, so it never exceeds the catalog.
 const MaxHomePanels = 6
 
 // HomeFollowGlobal is the .dtui.yaml timeframe value that makes a home panel
@@ -99,7 +100,7 @@ func HomeWindow(p *HomePanel, override string, global Timeframe) (tf Timeframe, 
 // the global one when that is wider — so the jumped-to list always contains
 // the row that was selected.
 func HomeJumpWindow(panel, global Timeframe) Timeframe {
-	if global.Absolute() || global.Dur > panel.Dur {
+	if global.Dur > panel.Dur {
 		return global
 	}
 	return panel
@@ -213,15 +214,6 @@ func homeSeriesInterval(tf Timeframe) string {
 	return "1h"
 }
 
-// SeriesTotal sums a timeseries column of a record.
-func SeriesTotal(rec map[string]any, key string) float64 {
-	total := 0.0
-	for _, p := range FloatSeries(rec[key]) {
-		total += p
-	}
-	return total
-}
-
 var homeFrontendErrors = &HomePanel{
 	ID: "frontend-errors", Title: "frontend errors", Dot: "series:1", Window: "24h",
 	Query: func(s Scope) string {
@@ -260,23 +252,12 @@ var homeVulnerabilities = &HomePanel{
 	Line: func(rec map[string]any) (string, string) {
 		level := Str(rec, "level")
 		return fmt.Sprintf("%-5s %4s %-8s %s",
-			Str(rec, "display_id"), FormatScore(rec["score"]), level, Str(rec, "title")), RiskClass(level)
+			Str(rec, "display_id"), FormatScore(rec["score"]), level, Str(rec, "title")), RiskLevelClass(level)
 	},
 	Jump: func(rec map[string]any, s Scope) HomeJump {
 		return HomeJump{View: "vulnerabilities", Scope: s, Filter: Str(rec, "display_id")}
 	},
 	Yank: func(rec map[string]any) string { return Str(rec, "display_id") },
-}
-
-// RiskClass maps a vulnerability risk level to a semantic cell class.
-func RiskClass(level string) string {
-	switch level {
-	case "CRITICAL":
-		return "error"
-	case "HIGH":
-		return "warn"
-	}
-	return "dim"
 }
 
 var homeAttacks = &HomePanel{

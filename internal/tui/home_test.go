@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/x/ansi"
 
@@ -434,7 +435,7 @@ func TestHomeRowClasses(t *testing.T) {
 	h := homeOf(t, a)
 
 	for _, c := range []struct{ level, class string }{
-		{"CRITICAL", "error"}, {"HIGH", "warn"}, {"MEDIUM", "dim"}, {"", "dim"},
+		{"CRITICAL", "error"}, {"HIGH", "warn"}, {"MEDIUM", ""}, {"LOW", "dim"}, {"", "dim"},
 	} {
 		if _, got := h.panels[4].def.Line(map[string]any{"level": c.level}); got != c.class {
 			t.Errorf("vulnerability %q → class %q, want %q", c.level, got, c.class)
@@ -541,6 +542,10 @@ func TestHomeRejectedLayoutBanner(t *testing.T) {
 			t.Errorf("banner misses %q:\n%s", want, out)
 		}
 	}
+	_, crafted := homeTestApp(t, nil, "home.panels[0]: \x1b[5mblink")
+	if out := crafted.View(160, 30); strings.Contains(out, "\x1b[5m") || !strings.Contains(out, "␛[5mblink") {
+		t.Errorf("banner must show the notice's control characters as glyphs:\n%q", out)
+	}
 	if _, clean := homeTestApp(t, nil, ""); strings.Contains(ansi.Strip(clean.View(160, 30)), "home config ignored") {
 		t.Error("no banner without a notice")
 	}
@@ -566,27 +571,28 @@ func TestHomeJumpCarriesPanelWindow(t *testing.T) {
 	}
 }
 
+// TestHomeColumnsSplit: order alone decides placement — panels alternate
+// left and right; one panel or a narrow terminal stacks them.
 func TestHomeColumnsSplit(t *testing.T) {
-	left := []HomePanelConfig{{ID: "a"}, {ID: "b"}, {ID: "c"}}
-	mixed := []HomePanelConfig{{ID: "a"}, {ID: "b", Right: true}, {ID: "c"}}
 	for name, c := range map[string]struct {
-		panels []HomePanelConfig
-		wide   bool
-		want   string
+		n    int
+		wide bool
+		want string
 	}{
-		"left only":    {left, true, "[[0 1 2]]"},
-		"mixed wide":   {mixed, true, "[[0 2] [1]]"},
-		"mixed narrow": {mixed, false, "[[0 1 2]]"},
-		"default":      {DefaultHomePanels(), true, "[[0 2 4] [1 3 5]]"},
+		"none":         {0, true, "[[]]"},
+		"single":       {1, true, "[[0]]"},
+		"odd wide":     {3, true, "[[0 2] [1]]"},
+		"odd narrow":   {3, false, "[[0 1 2]]"},
+		"default wide": {len(DefaultHomePanels()), true, "[[0 2 4] [1 3 5]]"},
 	} {
-		if got := fmt.Sprint(HomeColumns(c.panels, c.wide)); got != c.want {
+		if got := fmt.Sprint(HomeColumns(c.n, c.wide)); got != c.want {
 			t.Errorf("%s: columns = %s, want %s", name, got, c.want)
 		}
 	}
 }
 
-// TestHomeColumnsRender: right-column panels render beside the left ones,
-// and without any right panel every panel spans the full width.
+// TestHomeColumnsRender: the second panel renders beside the first, the
+// third under the first, and a single panel spans the full width.
 func TestHomeColumnsRender(t *testing.T) {
 	lineWith := func(view, s string) string {
 		for _, l := range strings.Split(view, "\n") {
@@ -598,7 +604,7 @@ func TestHomeColumnsRender(t *testing.T) {
 	}
 	_, hv := homeTestApp(t, []HomePanelConfig{
 		{ID: "problems"},
-		{ID: "attacks", Right: true},
+		{ID: "attacks"},
 		{ID: "vulnerabilities"},
 	}, "")
 	view := ansi.Strip(hv.View(140, 30))
@@ -609,10 +615,10 @@ func TestHomeColumnsRender(t *testing.T) {
 		t.Errorf("vulnerabilities should sit under problems, not beside attacks:\n%s", view)
 	}
 
-	_, hv = homeTestApp(t, []HomePanelConfig{{ID: "problems"}, {ID: "attacks"}}, "")
+	_, hv = homeTestApp(t, []HomePanelConfig{{ID: "problems"}}, "")
 	view = ansi.Strip(hv.View(140, 30))
 	if top := strings.TrimRight(lineWith(view, "active problems"), " "); strings.Count(top, "╭") != 1 || len([]rune(top)) < 130 {
-		t.Errorf("left-only panels should span the full width: %q", top)
+		t.Errorf("a single panel should span the full width: %q", top)
 	}
 }
 
@@ -628,11 +634,11 @@ func TestHomePanelLineSafeText(t *testing.T) {
 	}
 }
 
-// TestHomeColumnsTabOrder: tab follows entry order, not screen columns.
+// TestHomeColumnsTabOrder: tab follows entry order.
 func TestHomeColumnsTabOrder(t *testing.T) {
 	a, hv := homeTestApp(t, []HomePanelConfig{
 		{ID: "problems"},
-		{ID: "attacks", Right: true},
+		{ID: "attacks"},
 		{ID: "vulnerabilities"},
 	}, "")
 	var order []string
@@ -642,5 +648,20 @@ func TestHomeColumnsTabOrder(t *testing.T) {
 	}
 	if got := strings.Join(order, ","); got != "problems,attacks,vulnerabilities" {
 		t.Errorf("tab order = %s", got)
+	}
+}
+
+// TestHeaderNamesAbsoluteWindow: a view anchored to an absolute window (a
+// trace's, a problem's) shows its range in the header, not "last trace".
+func TestHeaderNamesAbsoluteWindow(t *testing.T) {
+	a := testApp(t, "logs")
+	tv, ok := a.top().(*tableView)
+	if !ok {
+		t.Fatalf("top = %T, want *tableView", a.top())
+	}
+	tv.scope.Timeframe = anchoredWindow(time.Date(2026, 7, 15, 11, 41, 0, 0, time.Local), 5*time.Minute)
+	head := strings.Join(strings.Fields(ansi.Strip(a.View())), " ")
+	if strings.Contains(head, "last trace") || !strings.Contains(head, "◷ 11:36 → 11:46 (t: 2h)") {
+		t.Errorf("header should name the trace window's range:\n%s", head)
 	}
 }

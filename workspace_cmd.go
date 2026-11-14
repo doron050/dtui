@@ -71,10 +71,6 @@ func homeLayout(ws *workspace.Workspace) ([]tui.HomePanelConfig, []workspace.Iss
 	if ws.Home == nil {
 		return nil, issues
 	}
-	if n := len(ws.Home.Panels); n > catalog.MaxHomePanels {
-		issues = append(issues, workspace.Issue{Line: ws.Home.Panels[0].Line, Path: "home",
-			Msg: fmt.Sprintf("%d panels listed — max %d (one query each)", n, catalog.MaxHomePanels)})
-	}
 	var out []tui.HomePanelConfig
 	for _, p := range ws.Home.Panels {
 		if catalog.LookupHomePanel(p.Panel) == nil {
@@ -82,7 +78,7 @@ func homeLayout(ws *workspace.Workspace) ([]tui.HomePanelConfig, []workspace.Iss
 				Msg: fmt.Sprintf("unknown panel %q — available: %s", p.Panel, strings.Join(catalog.HomePanelIDs(), ", "))})
 			continue
 		}
-		out = append(out, tui.HomePanelConfig{ID: p.Panel, Timeframe: p.Timeframe, Right: p.Column == workspace.ColumnRight})
+		out = append(out, tui.HomePanelConfig{ID: p.Panel, Timeframe: p.Timeframe})
 	}
 	if len(issues) > 0 {
 		sort.SliceStable(issues, func(i, j int) bool { return issues[i].Line < issues[j].Line })
@@ -97,7 +93,7 @@ func homeNotice(issues []workspace.Issue) string {
 	if len(issues) == 0 {
 		return ""
 	}
-	s := issues[0].Error()
+	s := catalog.SafeText(issues[0].Error())
 	if n := len(issues) - 1; n > 0 {
 		s += fmt.Sprintf(" (+%d more)", n)
 	}
@@ -114,7 +110,7 @@ func reportWorkspace(w io.Writer, path string) bool {
 	fmt.Fprintf(w, "%s\n\n", path)
 	ws, err := workspace.Load(path)
 	if err != nil {
-		fmt.Fprintf(w, "  ✗ %s\n\n", strings.TrimPrefix(err.Error(), path+": "))
+		fmt.Fprintf(w, "  ✗ %s\n\n", catalog.SafeText(strings.TrimPrefix(err.Error(), path+": ")))
 		fmt.Fprintln(w, "✗ invalid — dtui ignores this whole file at launch (startup warning)")
 		return false
 	}
@@ -159,7 +155,7 @@ func reportWorkspace(w io.Writer, path string) bool {
 	case len(issues) > 0:
 		row("✗", "home", "rejected — dtui shows the default home layout with a warning")
 		for _, is := range issues {
-			fmt.Fprintf(w, "      line %-3d %s\n", is.Line, is.Error())
+			fmt.Fprintf(w, "      line %-3d %s\n", is.Line, catalog.SafeText(is.Error()))
 		}
 	case panels == nil:
 		row("✓", "home", unset+" — default layout")
@@ -167,7 +163,7 @@ func reportWorkspace(w io.Writer, path string) bool {
 		row("✓", "home", fmt.Sprintf("%d panels", len(panels)))
 	}
 	for _, u := range ws.UnknownKeys {
-		fmt.Fprintf(w, "  ! line %-3d %s\n", u.Line, u.Error())
+		fmt.Fprintf(w, "  ! line %-3d %s\n", u.Line, catalog.SafeText(u.Error()))
 	}
 
 	layout := "home layout"
@@ -201,7 +197,7 @@ func writeHomeLayout(w io.Writer, panels []tui.HomePanelConfig, global catalog.T
 	if panels == nil {
 		panels = tui.DefaultHomePanels()
 	}
-	cols := tui.HomeColumns(panels, true)
+	cols := tui.HomeColumns(len(panels), true)
 	names := []string{"left", "right"}
 	if len(cols) == 1 {
 		names = []string{"full"}
@@ -224,9 +220,6 @@ func writeHomeLayout(w io.Writer, panels []tui.HomePanelConfig, global catalog.T
 			}
 			fmt.Fprintf(w, "  %-5s  %d. %-18s %-5s %s\n", label, r+1, def.ID, tf.Label, note)
 		}
-	}
-	if len(cols) == 1 && len(panels) > 1 {
-		fmt.Fprintln(w, "  (one full-width column — add column: right to an entry for a second column)")
 	}
 }
 

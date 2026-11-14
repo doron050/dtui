@@ -1126,7 +1126,7 @@ func (a *app) headerWindow() string {
 		}
 	case windowProvider:
 		if tf := v.Window(); tf.Label != "" && tf.DQL() != a.tf.DQL() {
-			return theme.Badge.Render("◷ last "+tf.Label) + theme.Dim.Render(" (t: "+a.tf.Label+")")
+			return theme.Badge.Render("◷ "+windowLabel(tf)) + theme.Dim.Render(" (t: "+a.tf.Label+")")
 		}
 	}
 	return global

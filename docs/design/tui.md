@@ -371,11 +371,11 @@ list); `tab`/`j`/`k` move between panels and rows, `ctrl+q` reveals the
 focused panel's query.
 
 **Layout.** A workspace `home.panels` list picks, orders and windows the
-panels (at most six — one query each). Panels sit in the left column
-unless an entry says `column: right`; each column stacks its panels in
-entry order, a layout with no right panel spans the full width, and below
-110 columns everything stacks in entry order. The default home is the six
-panels alternating left and right. Any invalid entry rejects the whole
+panels (at most six — one query each); ids only, per
+[ADR-0017](../adr/0017-configurable-home-is-scope.md). Order alone decides
+placement: panels alternate left and right, row by row, a single panel
+spans the full width, and below 110 columns everything stacks in entry
+order. The default home is the six panels in catalog order. Any invalid entry rejects the whole
 layout: the default panels render under a persistent `✗ home config ignored
 — <reason>` banner and the startup line turns red. `dtui workspace validate`
 lists every finding with its line.

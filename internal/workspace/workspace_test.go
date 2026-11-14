@@ -1,8 +1,10 @@
 package workspace
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -339,5 +341,22 @@ func TestDiscoverAbsent(t *testing.T) {
 	}
 	if w != nil {
 		t.Fatalf("Discover = %+v, want nil (no file anywhere above %s)", w, dir)
+	}
+}
+
+// TestKnownKeysMatchStruct keeps the unknown-key check in step with the
+// schema: every serialized field is known, and nothing else is but `home`,
+// which is parsed by hand.
+func TestKnownKeysMatchStruct(t *testing.T) {
+	want := map[string]bool{"home": true}
+	rt := reflect.TypeFor[Workspace]()
+	for i := range rt.NumField() {
+		name, _, _ := strings.Cut(rt.Field(i).Tag.Get("yaml"), ",")
+		if name != "" && name != "-" {
+			want[name] = true
+		}
+	}
+	if !maps.Equal(knownKeys, want) {
+		t.Errorf("knownKeys = %v, want the struct's yaml keys %v", knownKeys, want)
 	}
 }

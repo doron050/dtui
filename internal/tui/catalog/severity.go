@@ -96,3 +96,19 @@ func SeverityFieldClass(field, val string) string {
 	}
 	return ""
 }
+
+// RiskLevelClass maps a vulnerability risk level (CRITICAL, HIGH, MEDIUM,
+// LOW, NONE) to a semantic cell class: CRITICAL and HIGH stand out, MEDIUM
+// stays plain, the rest recede.
+func RiskLevelClass(level string) string {
+	switch level {
+	case "CRITICAL":
+		return "error"
+	case "HIGH":
+		return "warn"
+	case "MEDIUM":
+		return ""
+	default:
+		return "dim"
+	}
+}

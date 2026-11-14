@@ -468,7 +468,7 @@ func vulnPreview(rec map[string]any) []PreviewFact {
 	var b previewBuilder
 	level := firstNonEmpty(Str(rec, "level"), Str(rec, "vulnerability.risk.level"))
 	score := firstNonEmpty(FormatScore(rec["score"]), FormatScore(rec["vulnerability.risk.score"]))
-	class := classRiskLevel(level)
+	class := RiskLevelClass(level)
 	if class == "" {
 		class = classRiskScore(score)
 	}
@@ -502,7 +502,7 @@ func attackPreview(rec map[string]any) []PreviewFact {
 	action := Str(rec, "finding.action")
 	b.classed("action", action, classAttackAction(action))
 	sev := Str(rec, "finding.severity")
-	b.classed("severity", sev, classRiskLevel(sev))
+	b.classed("severity", sev, RiskLevelClass(sev))
 	b.add("type", Str(rec, "finding.type"))
 	b.wrapped("payload", Str(rec, "entry_point.payload"))
 	b.add("entry point", Str(rec, "entry_point.function.name"))

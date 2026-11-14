@@ -302,16 +302,14 @@ segments:
       - payment-region
 
 # home — the home screen's panels (max 6). Each entry is a panel id or a map:
-# column: right puts it in the right column (left is the default; each
-# column lists its panels top to bottom in entry order), timeframe:
-# <n>m/<n>h/<n>d pins its window, `global` makes it follow the header
-# window (`t`). Omit the block for the default six panels.
+# timeframe: <n>m/<n>h/<n>d pins its window, `global` makes it follow the
+# header window (`t`). Order decides placement: panels alternate left and
+# right, row by row. Omit the block for the default six panels.
 home:
   panels:
-    - problems                     # curated default window (24h)
+    - problems                     # curated default window (24h); left
     - panel: vulnerabilities
-      column: right
-      timeframe: 7d                # pinned: shown as ◷ 7d when it differs
+      timeframe: 7d                # pinned: shown as ◷ 7d when it differs; right
     - panel: failing-services
       timeframe: global            # follows t; left, under problems
     - k8s-warnings
@@ -328,9 +326,8 @@ home:
 | `segments[].segment` | string | Segment name or UID. Required in the map form (the bare-string form sets only this). Unknown or ambiguous names warn instead of guessing. |
 | `segments[].variables` | map of lists | Pre-bound values for the segment's variables; each variable needs at least one value. |
 | `segments[].primary-tags` | list of strings | Extra tag columns for this segment, added to the global `primary-tags` (up to 5 per list). |
-| `home.panels` | list | Up to 6 home panels, no duplicates; entry order is the order within each column and for `tab`. Ids: `problems`, `failing-services`, `k8s-warnings`, `frontend-errors`, `vulnerabilities`, `attacks`. |
+| `home.panels` | list | Up to 6 home panels, no duplicates; entry order decides placement (panels alternate left and right) and `tab` order. Ids: `problems`, `failing-services`, `k8s-warnings`, `frontend-errors`, `vulnerabilities`, `attacks`. |
 | `home.panels[].panel` | string | Panel id. Required in the map form (the bare-string form sets only this). |
-| `home.panels[].column` | string | `left` (default) or `right`. With no right panel, every panel spans the full width; below 110 terminal columns all panels stack in entry order. |
 | `home.panels[].timeframe` | string | `<n>m`, `<n>h`, `<n>d`, or `global` (follow `t`). Default: the panel's curated window. |
 
 </details>

@@ -1,4 +1,4 @@
- ▛▞▟ dtui  ·  context:test  ·  ● readonly            last 2h · ◷ 1 panel differ
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                               last 2h
  home ─────────────────────────────────────────────────────────────────────────
 ╭─ ● active problems · 2h · 2 ────────────────────────────────────────────────╮
 │ P-260714  19m  CPU saturation · ip-10-0-2-41                                │
@@ -9,10 +9,10 @@
 │                                                                             │
 │                                                                             │
 │                                                                             │
-╰─────────────────────────────────────────────────────────────────────────────╯
-╭─ ● frontend errors  ◷ 7d  · 2 ──────────────────────────────────────────────╮
-│    42×  TypeError: Cannot read properties of undefined (reading 'id') · st… │
-│     9×  NetworkError when attempting to fetch resource. · storefront        │
+│                                                                             │
+│                                                                             │
+│                                                                             │
+│                                                                             │
 │                                                                             │
 │                                                                             │
 │                                                                             │

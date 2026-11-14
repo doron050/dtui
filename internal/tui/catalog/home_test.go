@@ -20,7 +20,7 @@ func TestHomePanelsRegistry(t *testing.T) {
 		}
 	}
 	if len(HomePanels) > MaxHomePanels {
-		t.Errorf("default layout exceeds MaxHomePanels")
+		t.Errorf("the panel catalog exceeds MaxHomePanels: a layout listing every panel would break the query budget")
 	}
 	if LookupHomePanel("nope") != nil {
 		t.Error("unknown id should not resolve")

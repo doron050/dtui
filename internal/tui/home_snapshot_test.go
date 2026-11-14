@@ -15,8 +15,8 @@ func TestSnapshotHome(t *testing.T) {
 }
 
 // TestSnapshotHomeConfigured pins the configured layouts a .dtui.yaml home
-// block can produce: two uneven columns with pinned and global windows, one
-// full-width column, and a rejected layout under its banner.
+// block can produce: an odd panel count with pinned and global windows, a
+// single full-width panel, and a rejected layout under its banner.
 func TestSnapshotHomeConfigured(t *testing.T) {
 	pinSnapshotClock(t)
 	for name, c := range map[string]struct {
@@ -25,14 +25,13 @@ func TestSnapshotHomeConfigured(t *testing.T) {
 	}{
 		"columns": {panels: []HomePanelConfig{
 			{ID: "vulnerabilities"},
-			{ID: "problems", Right: true, Timeframe: "7d"},
+			{ID: "problems", Timeframe: "7d"},
 			{ID: "failing-services", Timeframe: "global"},
-			{ID: "attacks", Right: true, Timeframe: "30d"},
+			{ID: "attacks", Timeframe: "30d"},
 			{ID: "k8s-warnings"},
 		}},
 		"single-column": {panels: []HomePanelConfig{
 			{ID: "problems", Timeframe: "global"},
-			{ID: "frontend-errors", Timeframe: "7d"},
 		}},
 		"rejected": {notice: `home.panels[1]: unknown panel "vulns" (line 5)`},
 	} {

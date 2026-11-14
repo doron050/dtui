@@ -89,8 +89,8 @@ home:
 	for _, want := range []string{
 		"✓ home          2 panels",
 		"! line 3   colour: unknown key",
-		"full   1. vulnerabilities    7d    fixed · ◷ differs from header",
-		"       2. failing-services   2h    follows t",
+		"left   1. vulnerabilities    7d    fixed · ◷ differs from header",
+		"right  1. failing-services   2h    follows t",
 		"✓ valid, 1 warning",
 	} {
 		if !strings.Contains(got, want) {
@@ -114,13 +114,37 @@ home:
 	}
 }
 
+// TestReportWorkspaceIsTerminalSafe: a committed .dtui.yaml is untrusted
+// input, so nothing from it reaches the terminal as a control sequence —
+// not keys, not values, not the startup notice.
+func TestReportWorkspaceIsTerminalSafe(t *testing.T) {
+	files := []string{
+		"\"\\e]0;x\\a\": 1\nview: \"\\e[5mnope\"\nhome:\n  \"\\e[31mrows\": []\n  panels:\n    - panel: \"\\e[2Jvulns\"\n      \"\\e[1mlimit\": 3\n",
+		"timeframe: \"\\e[31mforever\"\n",
+	}
+	for _, f := range files {
+		var out bytes.Buffer
+		reportWorkspace(&out, writeWorkspaceFile(t, f))
+		if strings.ContainsAny(out.String(), "\x1b\a") {
+			t.Errorf("report carries a raw control character:\n%q", out.String())
+		}
+	}
+	ws, err := workspace.Load(writeWorkspaceFile(t, files[0]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, issues := homeLayout(ws)
+	if n := homeNotice(issues); n == "" || strings.ContainsAny(n, "\x1b\a") {
+		t.Errorf("home notice = %q", n)
+	}
+}
+
 func TestHomeLayoutColumns(t *testing.T) {
 	path := writeWorkspaceFile(t, `
 home:
   panels:
     - problems
-    - panel: attacks
-      column: right
+    - attacks
     - panel: vulnerabilities
       timeframe: 7d
 `)
@@ -129,12 +153,12 @@ home:
 		t.Fatal(err)
 	}
 	panels, issues := homeLayout(ws)
-	if len(issues) != 0 || len(panels) != 3 || panels[0].Right || !panels[1].Right || panels[2].Right {
+	if len(issues) != 0 || len(panels) != 3 || panels[1].ID != "attacks" {
 		t.Fatalf("homeLayout = %+v, %v", panels, issues)
 	}
 	var out bytes.Buffer
 	if !reportWorkspace(&out, path) {
-		t.Fatalf("column layout should validate:\n%s", out.String())
+		t.Fatalf("layout should validate:\n%s", out.String())
 	}
 	for _, want := range []string{"left   1. problems", "       2. vulnerabilities    7d", "right  1. attacks"} {
 		if !strings.Contains(out.String(), want) {
@@ -144,22 +168,21 @@ home:
 }
 
 // TestHomeLayoutConfigurations walks the home block shapes a user can write:
-// each valid one maps to its panels and columns, each invalid one rejects
+// each valid one maps to its panels in entry order, each invalid one rejects
 // the whole layout with a finding that names the entry.
 func TestHomeLayoutConfigurations(t *testing.T) {
 	for name, c := range map[string]struct {
 		yaml  string
-		cols  string // "L"/"R" per panel, for valid layouts
+		ids   string // panel ids in order, for valid layouts
 		issue string // substring of the first finding, for invalid ones
 	}{
-		"bare ids":         {yaml: "panels: [problems, attacks]", cols: "LL"},
-		"all six":          {yaml: "panels: [problems, failing-services, k8s-warnings, frontend-errors, vulnerabilities, attacks]", cols: "LLLLLL"},
-		"mixed columns":    {yaml: "panels:\n    - problems\n    - {panel: attacks, column: right}\n    - {panel: vulnerabilities, column: left, timeframe: 7d}", cols: "LRL"},
-		"right only":       {yaml: "panels:\n    - {panel: problems, column: right}\n    - {panel: attacks, column: right}", cols: "RR"},
-		"global window":    {yaml: "panels:\n    - {panel: problems, timeframe: global, column: right}", cols: "R"},
+		"bare ids":         {yaml: "panels: [problems, attacks]", ids: "problems attacks"},
+		"all six":          {yaml: "panels: [problems, failing-services, k8s-warnings, frontend-errors, vulnerabilities, attacks]", ids: "problems failing-services k8s-warnings frontend-errors vulnerabilities attacks"},
+		"mixed entries":    {yaml: "panels:\n    - problems\n    - {panel: attacks}\n    - {panel: vulnerabilities, timeframe: 7d}", ids: "problems attacks vulnerabilities"},
+		"global window":    {yaml: "panels:\n    - {panel: problems, timeframe: global}", ids: "problems"},
 		"too many":         {yaml: "panels: [problems, failing-services, k8s-warnings, frontend-errors, vulnerabilities, attacks, problems]", issue: "duplicate panel"},
 		"unknown panel":    {yaml: "panels: [problems, vulns]", issue: `home.panels[1]: unknown panel "vulns"`},
-		"bad column":       {yaml: "panels:\n    - {panel: problems, column: center}", issue: `home.panels[0].column: "center"`},
+		"column key":       {yaml: "panels:\n    - {panel: problems, column: right}", issue: "home.panels[0].column: unknown key"},
 		"bad window":       {yaml: "panels:\n    - {panel: problems, timeframe: 1w}", issue: `home.panels[0].timeframe: "1w"`},
 		"empty list":       {yaml: "panels: []", issue: "home.panels: empty"},
 		"unknown home key": {yaml: "panels: [problems]\n  layout: grid", issue: "home.layout: unknown key"},
@@ -179,12 +202,12 @@ func TestHomeLayoutConfigurations(t *testing.T) {
 			if len(issues) != 0 {
 				t.Fatalf("unexpected findings: %v", issues)
 			}
-			var cols string
-			for _, p := range panels {
-				cols += map[bool]string{false: "L", true: "R"}[p.Right]
+			ids := make([]string, len(panels))
+			for i, p := range panels {
+				ids[i] = p.ID
 			}
-			if cols != c.cols {
-				t.Errorf("columns = %s, want %s", cols, c.cols)
+			if got := strings.Join(ids, " "); got != c.ids {
+				t.Errorf("panels = %s, want %s", got, c.ids)
 			}
 		})
 	}

@@ -2,6 +2,8 @@ package workspace
 
 import (
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -11,23 +13,15 @@ import (
 // window (the `t` picker) instead of a fixed lookback.
 const HomeFollowGlobal = "global"
 
-// Home panel columns. Panels sit in the left column unless they say
-// column: right; each column lists its panels top to bottom in entry order.
-const (
-	ColumnLeft  = "left"
-	ColumnRight = "right"
-)
-
 // Home is the optional home-screen layout: which curated panels the home
-// view shows, in which order and column, and each one's lookback. It narrows
-// what the session shows like every other workspace key — panels are
-// curated ids, not queries.
+// view shows, in which order, and each one's lookback. It narrows what the
+// session shows like every other workspace key — panels are curated ids,
+// not queries. Order alone decides placement (the view alternates columns).
 //
 //	home:
 //	  panels:
-//	    - problems                 # left (the default)
+//	    - problems
 //	    - panel: vulnerabilities
-//	      column: right
 //	      timeframe: 7d
 type Home struct {
 	Panels []HomePanel // entry order
@@ -38,7 +32,6 @@ type Home struct {
 type HomePanel struct {
 	Panel     string // curated panel id, lower-cased
 	Timeframe string // "" (panel default), "<n>m|h|d", or HomeFollowGlobal
-	Column    string // ColumnLeft or ColumnRight
 	Line      int    // source line, for error messages
 
 	path string
@@ -60,6 +53,22 @@ func (i Issue) Error() string {
 		return i.Msg
 	}
 	return i.Path + ": " + i.Msg
+}
+
+// plainKeyRe matches keys that can be shown in a YAML path verbatim.
+var plainKeyRe = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+
+// keyPath appends a mapping key to a YAML path. Keys come from the file, so
+// anything beyond a plain word is quoted: a validator prints the path to a
+// terminal, and a crafted key must not carry escape sequences there.
+func keyPath(prefix, key string) string {
+	if !plainKeyRe.MatchString(key) {
+		key = strconv.Quote(key)
+	}
+	if prefix == "" {
+		return key
+	}
+	return prefix + "." + key
 }
 
 func issueAt(n *yaml.Node, path, format string, args ...any) Issue {
@@ -84,7 +93,7 @@ func parseHome(n *yaml.Node) (*Home, []Issue) {
 			panels = v
 			continue
 		}
-		issues = append(issues, issueAt(k, "home."+k.Value, "unknown key (supported: panels)"))
+		issues = append(issues, issueAt(k, keyPath("home", k.Value), "unknown key (supported: panels)"))
 	}
 	switch {
 	case panels == nil:
@@ -116,7 +125,7 @@ func parseHome(n *yaml.Node) (*Home, []Issue) {
 }
 
 func parseHomePanel(n *yaml.Node, path string) (HomePanel, []Issue) {
-	p := HomePanel{Line: n.Line, Column: ColumnLeft}
+	p := HomePanel{Line: n.Line}
 	switch n.Kind {
 	case yaml.ScalarNode:
 		p.Panel = strings.ToLower(strings.TrimSpace(n.Value))
@@ -126,14 +135,14 @@ func parseHomePanel(n *yaml.Node, path string) (HomePanel, []Issue) {
 		return p, nil
 	case yaml.MappingNode:
 	default:
-		return p, []Issue{issueAt(n, path, "expected a panel id or a {panel, column, timeframe} mapping")}
+		return p, []Issue{issueAt(n, path, "expected a panel id or a {panel, timeframe} mapping")}
 	}
 
 	var issues []Issue
 	for i := 0; i+1 < len(n.Content); i += 2 {
 		k, v := n.Content[i], n.Content[i+1]
 		if v.Kind != yaml.ScalarNode {
-			issues = append(issues, issueAt(v, path+"."+k.Value, "expected a single value"))
+			issues = append(issues, issueAt(v, keyPath(path, k.Value), "expected a single value"))
 			continue
 		}
 		switch k.Value {
@@ -146,15 +155,8 @@ func parseHomePanel(n *yaml.Node, path string) (HomePanel, []Issue) {
 				continue
 			}
 			p.Timeframe = tf
-		case "column":
-			col := strings.ToLower(strings.TrimSpace(v.Value))
-			if col != ColumnLeft && col != ColumnRight {
-				issues = append(issues, issueAt(v, path+".column", "%q — expected %q or %q (default %s)", v.Value, ColumnLeft, ColumnRight, ColumnLeft))
-				continue
-			}
-			p.Column = col
 		default:
-			issues = append(issues, issueAt(k, path+"."+k.Value, "unknown key (supported: panel, column, timeframe)"))
+			issues = append(issues, issueAt(k, keyPath(path, k.Value), "unknown key (supported: panel, timeframe)"))
 		}
 	}
 	if p.Panel == "" {

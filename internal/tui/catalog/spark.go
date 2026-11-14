@@ -123,3 +123,12 @@ func sparkResample(values []float64, targetLen int) []float64 {
 	}
 	return result
 }
+
+// SeriesTotal sums a timeseries column of a record.
+func SeriesTotal(rec map[string]any, key string) float64 {
+	total := 0.0
+	for _, p := range FloatSeries(rec[key]) {
+		total += p
+	}
+	return total
+}

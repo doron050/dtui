@@ -167,7 +167,7 @@ func Load(path string) (*Workspace, error) {
 			case k.Value == "home":
 				w.Home, w.HomeIssues = parseHome(v)
 			case !knownKeys[k.Value]:
-				w.UnknownKeys = append(w.UnknownKeys, issueAt(k, k.Value, "unknown key — ignored by this build"))
+				w.UnknownKeys = append(w.UnknownKeys, issueAt(k, keyPath("", k.Value), "unknown key — ignored by this build"))
 			}
 		}
 	}

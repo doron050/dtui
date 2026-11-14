@@ -14,41 +14,41 @@ import (
 )
 
 // HomePanelConfig is one configured home panel (.dtui.yaml home.panels):
-// a catalog.HomePanel id, an optional window override ("7d", or
-// catalog.HomeFollowGlobal) and its column.
+// a catalog.HomePanel id and an optional window override ("7d", or
+// catalog.HomeFollowGlobal).
 type HomePanelConfig struct {
 	ID        string
 	Timeframe string
-	Right     bool // right column; the left one is the default
 }
 
 // homeWideMin is the width from which the two home columns sit side by side.
 const homeWideMin = 110
 
-// DefaultHomePanels is the zero-config home: the curated panels alternating
-// left and right, so they pair up row by row.
+// DefaultHomePanels is the zero-config home: every curated panel in
+// catalog order.
 func DefaultHomePanels() []HomePanelConfig {
 	out := make([]HomePanelConfig, len(catalog.HomePanels))
 	for i, def := range catalog.HomePanels {
-		out[i] = HomePanelConfig{ID: def.ID, Right: i%2 == 1}
+		out[i] = HomePanelConfig{ID: def.ID}
 	}
 	return out
 }
 
-// HomeColumns splits panels into rendered columns of panel indices, each in
-// entry order: left then right. With no right panel, or on a narrow
-// terminal (wide = false), every panel stacks in one full-width column.
-func HomeColumns(panels []HomePanelConfig, wide bool) [][]int {
+// HomeColumns splits n panels into rendered columns of panel indices. Order
+// alone decides placement: panels alternate left and right, so they pair up
+// row by row. A single panel, or a narrow terminal (wide = false), stacks
+// every panel in one full-width column.
+func HomeColumns(n int, wide bool) [][]int {
 	var left, right, all []int
-	for i, p := range panels {
+	for i := range n {
 		all = append(all, i)
-		if p.Right {
+		if i%2 == 1 {
 			right = append(right, i)
 		} else {
 			left = append(left, i)
 		}
 	}
-	if !wide || len(left) == 0 || len(right) == 0 {
+	if !wide || len(right) == 0 {
 		return [][]int{all}
 	}
 	return [][]int{left, right}
@@ -81,7 +81,6 @@ type homeView struct {
 type homePanel struct {
 	def      *catalog.HomePanel
 	override string // configured window ("" = curated default)
-	right    bool   // right column
 	records  []map[string]any
 	loading  bool
 	err      error
@@ -108,7 +107,7 @@ func newHomeView(ds *dataSource, tf catalog.Timeframe) *homeView {
 	}
 	for _, c := range cfgs {
 		if def := catalog.LookupHomePanel(c.ID); def != nil {
-			v.panels = append(v.panels, &homePanel{def: def, override: c.Timeframe, right: c.Right})
+			v.panels = append(v.panels, &homePanel{def: def, override: c.Timeframe})
 		}
 	}
 	return v
@@ -141,8 +140,6 @@ func (v *homeView) YankText() (string, string, bool) {
 	}
 	return text, text, true
 }
-
-func classRisk(level string) string { return catalog.RiskClass(level) }
 
 func (v *homeView) Init() tea.Cmd { return v.Refresh() }
 
@@ -304,16 +301,12 @@ func (v *homeView) View(width, height int) string {
 
 	var banner string
 	if v.notice != "" {
-		banner = ansi.Truncate(theme.Error.Render("✗ home config ignored — "+v.notice)+
+		banner = ansi.Truncate(theme.Error.Render("✗ home config ignored — "+catalog.SafeText(v.notice))+
 			theme.Dim.Render(" · default layout shown · check with: dtui workspace validate"), width, "…")
 		height--
 	}
 
-	cfgs := make([]HomePanelConfig, len(v.panels))
-	for i, p := range v.panels {
-		cfgs[i] = HomePanelConfig{ID: p.def.ID, Right: p.right}
-	}
-	cols := HomeColumns(cfgs, width >= homeWideMin)
+	cols := HomeColumns(len(v.panels), width >= homeWideMin)
 	panelW := width/len(cols) - 1
 	blocks := make([]string, len(cols))
 	for c, col := range cols {

@@ -91,7 +91,7 @@ func vulnColumns(slot Column) []Column {
 		{Title: "SCORE", Width: 5, Right: true, Class: classRiskScore,
 			Value: func(rec map[string]any) string { return FormatScore(rec["score"]) },
 			Sort:  func(rec map[string]any) any { return rec["score"] }},
-		{Title: "LEVEL", Field: "level", Width: 8, Class: classRiskLevel},
+		{Title: "LEVEL", Field: "level", Width: 8, Class: RiskLevelClass},
 		{Title: "EXPOSURE", Width: 8, Value: exposureCell, Class: classExposure},
 		{Title: "EXPLOIT", Width: 7, Value: exploitCell, Class: classExploit},
 		{Title: "FIX", Width: 3, Value: fixCell, Class: func(val string) string {
@@ -298,7 +298,7 @@ var attackColumns = []Column{
 		Sort:  func(rec map[string]any) any { return Str(rec, "timestamp") }},
 	{Title: "TYPE", Field: "finding.type", Width: 14},
 	{Title: "ACTION", Field: "finding.action", Width: 7, Class: classAttackAction},
-	{Title: "SEVERITY", Field: "finding.severity", Width: 8, Class: classRiskLevel},
+	{Title: "SEVERITY", Field: "finding.severity", Width: 8, Class: RiskLevelClass},
 	{Title: "SOURCE", Width: 15, Value: func(rec map[string]any) string { return StrFirst(rec, "actor.ips") }},
 	{Title: "PROCESS", Width: 24, Value: attackProcess},
 	{Title: "LOCATION", Value: func(rec map[string]any) string {
@@ -655,17 +655,4 @@ func classRiskScore(val string) string {
 		return "warn"
 	}
 	return ""
-}
-
-func classRiskLevel(val string) string {
-	switch val {
-	case "CRITICAL":
-		return "error"
-	case "HIGH":
-		return "warn"
-	case "MEDIUM":
-		return ""
-	default:
-		return "dim"
-	}
 }
