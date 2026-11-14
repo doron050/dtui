@@ -347,7 +347,7 @@ func workspaceNotice(ws *workspace.Workspace) string {
 	case n > 1:
 		parts = append(parts, fmt.Sprintf("%d segments", n))
 	}
-	if ws.Timeframe != "" {
+	if _, ok := catalog.ParseTimeframe(ws.Timeframe); ok {
 		parts = append(parts, "last "+ws.Timeframe)
 	}
 	if ws.View != "" {

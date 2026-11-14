@@ -81,20 +81,32 @@ home:
     - panel: vulnerabilities
       timeframe: 7d
     - failing-services
+    - attacks
 `))
 	got := out.String()
 	if !ok {
 		t.Fatalf("warnings alone must not fail validation:\n%s", got)
 	}
 	for _, want := range []string{
-		"✓ home          2 panels",
+		"✓ home          3 panels",
 		"! line 3   colour: unknown key",
-		"left   1. vulnerabilities    7d    fixed · ◷ differs from header",
+		"left   1. vulnerabilities    7d    fixed · ◷ pinned away from header",
 		"right  1. failing-services   2h    follows t",
+		"2. attacks            24h   fixed · curated default",
 		"✓ valid, 1 warning",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("report misses %q:\n%s", want, got)
+		}
+	}
+
+	for _, label := range []string{"0h", "99999999999d"} {
+		out.Reset()
+		if reportWorkspace(&out, writeWorkspaceFile(t, "timeframe: "+label+"\n")) {
+			t.Errorf("timeframe %s is unusable, validation must fail:\n%s", label, out.String())
+		}
+		if want := "✗ timeframe     \"" + label + "\" is not a usable window — dtui uses 2h"; !strings.Contains(out.String(), want) {
+			t.Errorf("report misses %q:\n%s", want, out.String())
 		}
 	}
 

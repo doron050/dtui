@@ -74,6 +74,14 @@ segments:
 		}
 	}
 
+	zero, err := workspace.Load(writeWorkspaceFile(t, "timeframe: 0h\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := workspaceNotice(zero); strings.Contains(n, "last 0h") {
+		t.Errorf("notice %q names a window dtui does not use", n)
+	}
+
 	empty, err := workspace.Load(writeWorkspaceFile(t, ""))
 	if err != nil {
 		t.Fatal(err)

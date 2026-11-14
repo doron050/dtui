@@ -135,10 +135,17 @@ func reportWorkspace(w io.Writer, path string) bool {
 		row("✗", "view", fmt.Sprintf("unknown view %q — dtui starts on home (see dtui --help for views)", ws.View))
 	}
 	tf := catalog.DefaultTimeframe
-	if t, ok := catalog.ParseTimeframe(ws.Timeframe); ok {
+	t, tfOK := catalog.ParseTimeframe(ws.Timeframe)
+	switch {
+	case ws.Timeframe == "":
+		tfOK = true
+		row("✓", "timeframe", unset+" — "+tf.Label)
+	case tfOK:
 		tf = t
+		row("✓", "timeframe", ws.Timeframe)
+	default:
+		row("✗", "timeframe", fmt.Sprintf("%q is not a usable window — dtui uses %s", ws.Timeframe, tf.Label))
 	}
-	row("✓", "timeframe", or(ws.Timeframe, unset+" — "+tf.Label))
 	if len(ws.Segments) > 0 {
 		refs := make([]string, len(ws.Segments))
 		for i, s := range ws.Segments {
@@ -174,8 +181,10 @@ func reportWorkspace(w io.Writer, path string) bool {
 	writeHomeLayout(w, panels, tf)
 
 	errs := len(issues)
-	if !viewOK {
-		errs++
+	for _, ok := range []bool{viewOK, tfOK} {
+		if !ok {
+			errs++
+		}
 	}
 	fmt.Fprintln(w)
 	switch {
@@ -208,11 +217,14 @@ func writeHomeLayout(w io.Writer, panels []tui.HomePanelConfig, global catalog.T
 			def := catalog.LookupHomePanel(p.ID)
 			tf, fixed := catalog.HomeWindow(def, p.Timeframe, global)
 			note := "follows t"
-			if fixed {
+			switch {
+			case !fixed:
+			case p.Timeframe == "":
+				note = "fixed · curated default"
+			case tf.DQL() != global.DQL():
+				note = "fixed · ◷ pinned away from header"
+			default:
 				note = "fixed"
-				if tf.DQL() != global.DQL() {
-					note += " · ◷ differs from header"
-				}
 			}
 			label := ""
 			if r == 0 {
