@@ -381,8 +381,9 @@ layout: the default panels render under a persistent `✗ home config ignored
 lists every finding with its line.
 
 **Window honesty** ([ADR-0007](../adr/0007-scope-honesty.md)). Every panel
-title names its window: dim (`· 2h`) when it matches the header, an accent
-`◷ 24h` pill when it differs, and the header adds `· ◷ N panels differ`.
+title names its window: dim (`· 2h`, `· 24h`) for the header's window or
+the panel's curated default, an accent `◷ 7d` pill when the workspace pins
+it to another window, and the header then adds `· ◷ N panels differ`.
 `t` re-runs only the panels following the global window and the status line
 names the fixed ones. After a drill, the header shows the window the visible
 view actually queries (`◷ last 24h (t: 2h)`) when it differs from the

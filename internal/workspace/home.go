@@ -2,9 +2,11 @@ package workspace
 
 import (
 	"fmt"
+	"math"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -165,7 +167,13 @@ func parseHomePanel(n *yaml.Node, path string) (HomePanel, []Issue) {
 	return p, issues
 }
 
-// validWindow accepts a positive relative window ("30m", "24h", "7d").
+// validWindow accepts a positive relative window ("30m", "24h", "7d") whose
+// duration fits a time.Duration — the rule catalog.ParseTimeframe applies.
 func validWindow(s string) bool {
-	return timeframeRe.MatchString(s) && strings.TrimLeft(s[:len(s)-1], "0") != ""
+	if !timeframeRe.MatchString(s) {
+		return false
+	}
+	n, err := strconv.ParseInt(s[:len(s)-1], 10, 64)
+	unit := map[byte]time.Duration{'m': time.Minute, 'h': time.Hour, 'd': 24 * time.Hour}[s[len(s)-1]]
+	return err == nil && n > 0 && n <= math.MaxInt64/int64(unit)
 }

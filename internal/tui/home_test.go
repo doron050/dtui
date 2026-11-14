@@ -137,17 +137,17 @@ func TestHomeViewPanelStates(t *testing.T) {
 
 	out = ansi.Strip(h.View(120, 40))
 	for _, want := range []string{
-		"✗ query failed: boom",            // per-panel error, the others unaffected
-		"✓ nothing to report",             // empty result is explicit, not blank
-		"BackOff",                         // a loaded row
-		"5×",                              // series summed into an occurrence count
-		"kubernetes warnings  ◷ 24h  · 1", // window badge and row count in the title
+		"✗ query failed: boom",          // per-panel error, the others unaffected
+		"✓ nothing to report",           // empty result is explicit, not blank
+		"BackOff",                       // a loaded row
+		"5×",                            // series summed into an occurrence count
+		"kubernetes warnings · 24h · 1", // curated window and row count in the title
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("view missing %q:\n%s", want, out)
 		}
 	}
-	if strings.Contains(out, "active problems  ◷ 24h  ·") {
+	if strings.Contains(out, "active problems · 24h ·") {
 		t.Error("an errored panel must not advertise a row count")
 	}
 	if !h.Busy() {
@@ -488,13 +488,28 @@ func TestHomeConfiguredLayout(t *testing.T) {
 	}
 }
 
-// TestHomeWindowBadges: a panel whose window differs from the header's wears
-// a ◷ pill, one matching it a dim label, and the header counts the
-// differing panels.
+// TestHomeUnresolvedConfigFallsBack: a layout whose ids all slipped past
+// validation still lands on the default home instead of an empty grid.
+func TestHomeUnresolvedConfigFallsBack(t *testing.T) {
+	a, h := homeTestApp(t, []HomePanelConfig{{ID: "nope"}}, "")
+	if len(h.panels) != len(catalog.HomePanels) {
+		t.Fatalf("panels = %d, want the %d defaults", len(h.panels), len(catalog.HomePanels))
+	}
+	_ = h.View(120, 40)
+	press(a, key("tab"))
+	if h.focus != 1 {
+		t.Errorf("tab focus = %d, want 1", h.focus)
+	}
+}
+
+// TestHomeWindowBadges: a panel the workspace pinned away from the header's
+// window wears a ◷ pill; a curated default or global-following window is a
+// dim label, and the header counts only the pinned panels.
 func TestHomeWindowBadges(t *testing.T) {
 	a, hv := homeTestApp(t, []HomePanelConfig{
 		{ID: "vulnerabilities", Timeframe: "7d"},
 		{ID: "failing-services"},
+		{ID: "k8s-warnings"},
 	}, "")
 	out := ansi.Strip(hv.View(120, 30))
 	if !strings.Contains(strings.Join(strings.Fields(out), " "), "open vulnerabilities ◷ 7d") {
@@ -502,6 +517,9 @@ func TestHomeWindowBadges(t *testing.T) {
 	}
 	if !strings.Contains(out, "failing services · 2h") {
 		t.Errorf("global-following panel should show its window:\n%s", out)
+	}
+	if !strings.Contains(out, "kubernetes warnings · 24h") {
+		t.Errorf("a curated default window is named dim, not flagged:\n%s", out)
 	}
 	if head := ansi.Strip(a.View()); !strings.Contains(head, "last 2h · ◷ 1 panel differ") {
 		t.Errorf("header should count differing panels:\n%s", head)

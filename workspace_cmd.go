@@ -115,7 +115,7 @@ func reportWorkspace(w io.Writer, path string) bool {
 		return false
 	}
 
-	row := func(mark, key, val string) { fmt.Fprintf(w, "  %s %-13s %s\n", mark, key, val) }
+	row := func(mark, key, val string) { fmt.Fprintf(w, "  %s %-13s %s\n", mark, key, catalog.SafeText(val)) }
 	unset := "(not set)"
 	or := func(v, def string) string {
 		if v == "" {

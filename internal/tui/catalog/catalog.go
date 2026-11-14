@@ -33,6 +33,7 @@ package catalog
 
 import (
 	"fmt"
+	"math"
 	"regexp"
 	"sort"
 	"strconv"
@@ -121,11 +122,11 @@ func ParseTimeframe(label string) (Timeframe, bool) {
 	if m == nil {
 		return Timeframe{}, false
 	}
-	n, err := strconv.Atoi(m[1])
-	if err != nil || n <= 0 {
+	n, err := strconv.ParseInt(m[1], 10, 64)
+	unit := map[string]time.Duration{"m": time.Minute, "h": time.Hour, "d": 24 * time.Hour}[m[2]]
+	if err != nil || n <= 0 || n > math.MaxInt64/int64(unit) {
 		return Timeframe{}, false
 	}
-	unit := map[string]time.Duration{"m": time.Minute, "h": time.Hour, "d": 24 * time.Hour}[m[2]]
 	return Timeframe{Label: label, Dur: time.Duration(n) * unit}, true
 }
 

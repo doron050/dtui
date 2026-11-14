@@ -20,6 +20,8 @@ func TestParseTimeframe(t *testing.T) {
 		{"2w", false, 0},
 		{"0h", false, 0},
 		{"-2h", false, 0},
+		{"99999999999d", false, 0}, // overflows time.Duration
+		{"106751d", true, 106751 * 24 * time.Hour},
 	}
 	for _, tc := range cases {
 		tf, ok := ParseTimeframe(tc.label)

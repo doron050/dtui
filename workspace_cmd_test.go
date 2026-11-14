@@ -121,6 +121,7 @@ func TestReportWorkspaceIsTerminalSafe(t *testing.T) {
 	files := []string{
 		"\"\\e]0;x\\a\": 1\nview: \"\\e[5mnope\"\nhome:\n  \"\\e[31mrows\": []\n  panels:\n    - panel: \"\\e[2Jvulns\"\n      \"\\e[1mlimit\": 3\n",
 		"timeframe: \"\\e[31mforever\"\n",
+		"segments: [\"\\e]0;x\\a\\e[31mred\"]\nprimary-tags: [\"\\e[5mblink\"]\n",
 	}
 	for _, f := range files {
 		var out bytes.Buffer
@@ -136,6 +137,22 @@ func TestReportWorkspaceIsTerminalSafe(t *testing.T) {
 	_, issues := homeLayout(ws)
 	if n := homeNotice(issues); n == "" || strings.ContainsAny(n, "\x1b\a") {
 		t.Errorf("home notice = %q", n)
+	}
+}
+
+// TestHomeWindowGrammarsAgree: validate accepts a panel window exactly when
+// the runtime can parse it, so "✓ valid" never names a window dtui drops.
+func TestHomeWindowGrammarsAgree(t *testing.T) {
+	for _, label := range []string{"30m", "2h", "7d", "106751d", "106752d", "99999999999d", "0h", "00m", "2w", "-2h", "1.5h"} {
+		ws, err := workspace.Load(writeWorkspaceFile(t, "home:\n  panels:\n    - panel: problems\n      timeframe: "+label+"\n"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, issues := homeLayout(ws)
+		_, ok := catalog.ParseTimeframe(label)
+		if (len(issues) == 0) != ok {
+			t.Errorf("%s: validate accepts = %v, runtime parses = %v (%v)", label, len(issues) == 0, ok, issues)
+		}
 	}
 }
 

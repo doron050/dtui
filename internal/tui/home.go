@@ -105,12 +105,23 @@ func newHomeView(ds *dataSource, tf catalog.Timeframe) *homeView {
 	if len(cfgs) == 0 {
 		cfgs = DefaultHomePanels()
 	}
-	for _, c := range cfgs {
-		if def := catalog.LookupHomePanel(c.ID); def != nil {
-			v.panels = append(v.panels, &homePanel{def: def, override: c.Timeframe})
-		}
+	v.panels = resolvePanels(cfgs)
+	if len(v.panels) == 0 {
+		v.panels = resolvePanels(DefaultHomePanels())
 	}
 	return v
+}
+
+// resolvePanels looks up each configured id, skipping unknown ones; callers
+// validate ids first, so this only guards the landing screen against a slip.
+func resolvePanels(cfgs []HomePanelConfig) []*homePanel {
+	var out []*homePanel
+	for _, c := range cfgs {
+		if def := catalog.LookupHomePanel(c.ID); def != nil {
+			out = append(out, &homePanel{def: def, override: c.Timeframe})
+		}
+	}
+	return out
 }
 
 // Selection exposes the focused row for the app-level actions (pin, x/X, o).
@@ -181,16 +192,26 @@ func (v *homeView) fixedPanels() []string {
 	return out
 }
 
-// differing counts the panels whose window is not the header's — the ones
-// whose title carries the ◷ pill.
+// differing counts the panels whose title carries the ◷ pill.
 func (v *homeView) differing() int {
 	n := 0
 	for _, p := range v.panels {
-		if tf, _ := p.window(v.tf); tf.DQL() != v.tf.DQL() {
+		if v.pinnedAway(p) {
 			n++
 		}
 	}
 	return n
+}
+
+// pinnedAway reports a panel the workspace pinned to a window other than the
+// header's. Curated default windows are part of the panel, so they are named
+// dim; only a configured deviation is flagged.
+func (v *homeView) pinnedAway(p *homePanel) bool {
+	if p.override == "" || p.override == catalog.HomeFollowGlobal {
+		return false
+	}
+	tf, _ := p.window(v.tf)
+	return tf.DQL() != v.tf.DQL()
 }
 
 func (v *homeView) InputActive() bool { return false }
@@ -335,15 +356,15 @@ func panelDot(color string) string {
 	return theme.Class(color, "●")
 }
 
-// windowLabel is the panel title's window: dim when it is the header's
-// window, a ◷ pill when it differs — the title never hides that a panel
-// looks at another window than the header claims (ADR-0007).
+// windowLabel is the panel title's window. Every title names it, so a panel
+// never hides that it looks at another window than the header (ADR-0007);
+// a ◷ pill marks a window the workspace pinned away from the header's.
 func (v *homeView) windowLabel(p *homePanel) string {
 	tf, _ := p.window(v.tf)
-	if tf.DQL() == v.tf.DQL() {
-		return theme.Dim.Render("· " + tf.Label)
+	if v.pinnedAway(p) {
+		return theme.Badge.Render("◷ " + tf.Label)
 	}
-	return theme.Badge.Render("◷ " + tf.Label)
+	return theme.Dim.Render("· " + tf.Label)
 }
 
 // renderPanel draws one panel as a rounded box with the title embedded in the

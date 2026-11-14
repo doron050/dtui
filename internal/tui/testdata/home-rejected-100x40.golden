@@ -1,7 +1,7 @@
- ▛▞▟ dtui  ·  context:test  ·  ● readonly                               last 2h · ◷ 5 panels differ
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                   last 2h
  home ─────────────────────────────────────────────────────────────────────────────────────────────
-✗ home config ignored — home.panels[1]: unknown panel "vulns" (line 5) · default layout shown · che…
-╭─ ● active problems  ◷ 24h  · 2 ─────────────────────────────────────────────────────────────────╮
+✗ home config ignored — home.panels[1]: unknown panel "vulns" — available: problems, failing-servic…
+╭─ ● active problems · 24h · 2 ───────────────────────────────────────────────────────────────────╮
 │ P-260714  19m  CPU saturation · ip-10-0-2-41                                                    │
 │ P-260709   1h  Failure rate increase · OrderController +1                                       │
 │                                                                                                 │
@@ -11,22 +11,22 @@
 │ storefront-web                                  7 failed spans                                  │
 │                                                                                                 │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭─ ● kubernetes warnings  ◷ 24h  · 2 ─────────────────────────────────────────────────────────────╮
+╭─ ● kubernetes warnings · 24h · 2 ───────────────────────────────────────────────────────────────╮
 │ BackOff                     15×  checkout-7d9f8b6c5d-x2k4q                                      │
 │ FailedScheduling             2×  cart-5c6d7e8f9a-p9r8s                                          │
 │                                                                                                 │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭─ ● frontend errors  ◷ 24h  · 2 ─────────────────────────────────────────────────────────────────╮
+╭─ ● frontend errors · 24h · 2 ───────────────────────────────────────────────────────────────────╮
 │    42×  TypeError: Cannot read properties of undefined (reading 'id') · storefront              │
 │     9×  NetworkError when attempting to fetch resource. · storefront                            │
 │                                                                                                 │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭─ ● open vulnerabilities  ◷ 24h  · 2 ────────────────────────────────────────────────────────────╮
+╭─ ● open vulnerabilities · 24h · 2 ──────────────────────────────────────────────────────────────╮
 │ S-101  9.8 CRITICAL Remote code execution in log4j-core                                         │
 │ S-102  7.5 HIGH     Denial of service in netty-codec-http2                                      │
 │                                                                                                 │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭─ ● attack detections  ◷ 24h  · 2 ───────────────────────────────────────────────────────────────╮
+╭─ ● attack detections · 24h · 2 ─────────────────────────────────────────────────────────────────╮
 │ 11:52:10 SQL_INJECTION  Blocked checkout                                                        │
 │ 11:20:44 CMD_INJECTION  Monitored cart                                                          │
 │                                                                                                 │

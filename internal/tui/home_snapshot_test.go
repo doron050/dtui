@@ -1,6 +1,11 @@
 package tui
 
-import "testing"
+import (
+	"strings"
+	"testing"
+
+	"github.com/dynatrace-oss/dtui/internal/tui/catalog"
+)
 
 // TestSnapshotHome pins the launch screen: the six-panel grid with every
 // panel populated. Records mirror each panel's summarize aliases (problems by
@@ -33,7 +38,7 @@ func TestSnapshotHomeConfigured(t *testing.T) {
 		"single-column": {panels: []HomePanelConfig{
 			{ID: "problems", Timeframe: "global"},
 		}},
-		"rejected": {notice: `home.panels[1]: unknown panel "vulns" (line 5)`},
+		"rejected": {notice: `home.panels[1]: unknown panel "vulns" — available: ` + strings.Join(catalog.HomePanelIDs(), ", ")},
 	} {
 		t.Run(name, func(t *testing.T) {
 			a, h := homeTestApp(t, c.panels, c.notice)

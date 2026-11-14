@@ -33,15 +33,24 @@ the way every other `.dtui.yaml` key does.
   rejects the whole layout: the default home renders under a persistent
   banner, and the launch never fails. `dtui workspace validate` lists
   every finding offline, with its line.
-- **Windows are honest** ([ADR-0007](0007-scope-honesty.md)). A panel
-  whose window differs from the header says so (`◷ 7d`), the header counts
-  them, `t` names the panels that do not follow it, and a drill-down
-  carries the panel's window, widened to the global one when that is
-  longer.
+- **Windows are honest** ([ADR-0007](0007-scope-honesty.md)). Every panel
+  title names its window. One the workspace pinned away from the header's
+  wears a `◷ 7d` pill and the header counts those; a curated default
+  window stays dim, as it was before, so the pill keeps meaning "someone
+  configured this". `t` names the panels that do not follow it, and a
+  drill-down carries the panel's window, widened to the global one when
+  that is longer.
+- **Windows have no ceiling** beyond what parses: a pinned panel window
+  follows the same rule as the top-level `timeframe`, and one too large
+  for a duration is a validation error. A long pinned window is visible
+  in its pill and in `ctrl+q`; capping it would be a query-budget
+  decision for [ADR-0013](0013-query-budget.md), not a layout rule.
 
 ## Consequences
 
-- Zero config is unchanged: no `home` block means the six curated panels.
+- Zero config is unchanged: no `home` block means the six curated panels,
+  rendered as before (no pills, no header counter). A configured list
+  whose ids all fail to resolve also falls back to them.
 - New panels are catalog entries reviewed like views; a user cannot add
   one from the workspace file.
 - Requests for per-panel presentation (columns, row counts, titles,

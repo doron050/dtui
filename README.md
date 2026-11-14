@@ -336,7 +336,8 @@ Unknown top-level keys are ignored, so a newer committed file still works on
 an older dtui. The `home` block is strict: an unknown key, id or timeframe,
 a duplicate, or an empty list rejects the whole layout — dtui then shows the
 default home under a red `✗ home config ignored` banner, and every other key
-still applies.
+still applies. Values are used verbatim — there is no environment-variable
+expansion, so a committed file behaves the same on every machine.
 
 ### Validating the file
 
@@ -358,8 +359,7 @@ $ dtui workspace validate ./svc/.dtui.yaml
 It prints what dtui will do with each key and the resulting home layout
 (each panel's window, and whether it follows `t`), and exits non-zero when
 dtui would ignore any part of the file. It runs offline: segment names and
-the environment are resolved only at launch. Values are used verbatim — there is no environment-variable expansion,
-so a committed file behaves the same on every machine.
+the environment are resolved only at launch.
 
 Guarantees: the file carries **no credentials, contexts, or executable keys**
 by construction — it can only narrow what a session shows, never change what

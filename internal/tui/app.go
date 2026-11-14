@@ -1118,11 +1118,7 @@ func (a *app) headerWindow() string {
 	switch v := a.top().(type) {
 	case *homeView:
 		if n := v.differing(); n > 0 {
-			noun := "panels"
-			if n == 1 {
-				noun = "panel"
-			}
-			return global + theme.Dim.Render(fmt.Sprintf(" · ◷ %d %s differ", n, noun))
+			return global + theme.Dim.Render(" · ◷ "+plural(n, "panel")+" differ")
 		}
 	case windowProvider:
 		if tf := v.Window(); tf.Label != "" && tf.DQL() != a.tf.DQL() {

@@ -1,6 +1,6 @@
- ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                   last 2h · ◷ 4 panels differ
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                   last 2h · ◷ 2 panels differ
  home ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-╭─ ● open vulnerabilities  ◷ 24h  · 2 ────────────────────╮ ╭─ ● active problems  ◷ 7d  · 2 ──────────────────────────╮
+╭─ ● open vulnerabilities · 24h · 2 ──────────────────────╮ ╭─ ● active problems  ◷ 7d  · 2 ──────────────────────────╮
 │ S-101  9.8 CRITICAL Remote code execution in log4j-core │ │ P-260714  19m  CPU saturation · ip-10-0-2-41            │
 │ S-102  7.5 HIGH     Denial of service in netty-codec-h… │ │ P-260709   1h  Failure rate increase · OrderController… │
 │                                                         │ │                                                         │
@@ -24,7 +24,7 @@
 │                                                         │ │                                                         │
 │                                                         │ │                                                         │
 ╰─────────────────────────────────────────────────────────╯ │                                                         │
-╭─ ● kubernetes warnings  ◷ 24h  · 2 ─────────────────────╮ │                                                         │
+╭─ ● kubernetes warnings · 24h · 2 ───────────────────────╮ │                                                         │
 │ BackOff                     15×  checkout-7d9f8b6c5d-x… │ │                                                         │
 │ FailedScheduling             2×  cart-5c6d7e8f9a-p9r8s  │ │                                                         │
 │                                                         │ │                                                         │
