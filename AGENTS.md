@@ -27,7 +27,7 @@ A PR that trips one of these is wrong, not the check.
 | `internal/tui/catalog` is declarative data: no terminal framework, no module-internal imports. | [ADR-0003](docs/adr/0003-declarative-view-catalog.md) | `TestCatalogIsFrameworkFree` |
 | `internal/workspace` never reaches a tenant and holds no credentials; dtctl owns configuration. | [ADR-0005](docs/adr/0005-dtctl-owns-configuration.md) | `TestWorkspaceHasNoTenantAccess` |
 | **DQL is the substrate.** New views are catalog `Spec`s, not bespoke screens; a bespoke screen needs an ADR. | [ADR-0001](docs/adr/0001-dql-is-the-substrate.md) | review |
-| Every feature passes the six vision gates; the anti-goals are the governance gate. | [vision.md](docs/design/vision.md) | PR template; review |
+| Every feature passes the six vision gates; the anti-goals are the governance gate. Every view has both exits (`c`, `o`) and fits the query budget. | [vision.md](docs/design/vision.md), [ADR-0013](docs/adr/0013-query-budget.md) | `TestEveryViewHasBothExits`, `TestOpeningAViewFitsQueryBudget`; PR template; review |
 | Public repo: synthetic identifiers only. Never tenant names, URLs or IDs, hostnames, people, customers or ticket keys — in code, tests, goldens, docs or PRs. | privacy | review |
 
 When you find a rule that can be checked mechanically, add a test to
@@ -82,6 +82,7 @@ make install        # installs dtui + a `dtctl-tui` symlink so `dtctl tui` dispa
 make test           # go test -race ./...
 make lint           # golangci-lint run ./...  (.golangci.yml — must pass clean)
 make fmt            # golangci-lint fmt (gofmt + goimports)
+make mutation-diff  # gremlins on lines changed since origin/main (CI gate on PRs)
 
 go test -race ./internal/tui -run TestName                 # one test
 go test ./internal/tui -run Snapshot -update               # regenerate layout goldens
