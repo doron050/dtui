@@ -1,0 +1,12 @@
+# Mutation testing config for gremlins (https://gremlins.dev).
+# Run with `make mutation` (whole module) or `make mutation-diff` (changed
+# lines only); see CONTRIBUTING.md "Mutation testing".
+unleash:
+  # Every mutant recompiles its package. With parallel workers the baseline
+  # timing underestimates a mutant run, and the default coefficient reports
+  # most mutants as TIMED OUT, so give each run generous headroom.
+  timeout-coefficient: 30
+  exclude-files:
+    # The wasm/Chrome-extension host is built and verified separately.
+    - "(^|/)cmd/web/"
+    - "(^|/)wasm/"

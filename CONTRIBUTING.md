@@ -44,6 +44,32 @@ before you invest time. Overriding a gate requires an ADR, not a PR comment.
 - **Use synthetic identifiers only** in tests, fixtures and docs — never real
   environment names, URLs, entity IDs or tokens.
 
+## Mutation testing
+
+Line coverage says a line ran; it does not say a test would notice if that
+line were wrong. Mutation testing does: [gremlins](https://gremlins.dev)
+flips one operator or condition at a time (`==` → `!=`, `<` → `<=`, `+` → `-`)
+and reruns the tests. A mutant that no test catches has **lived**, which
+means that logic is unchecked.
+
+```bash
+make mutation-diff  # only lines changed since origin/main (what CI runs on PRs)
+make mutation       # the whole module (slow; CI runs it weekly)
+```
+
+PRs fail below 80% efficacy (killed ÷ (killed + lived)) on the changed
+lines once at least 10 mutants were judged; below that, one equivalent
+mutant would decide the result, so small diffs only report. To fix a lived mutant, add a test that asserts the behavior the line
+decides (a whole ordered result, a boundary, the case that must be
+excluded); a test that only executes the line will not kill it. Some
+mutants are *equivalent*, meaning the change has no observable effect
+(`if n > max { n = max }` with `>=`). Note those in the PR instead of
+contorting a test.
+
+Rules that hold for every view are tested once over the whole catalog in
+`internal/tui/adr_invariants_test.go` (both exits, the query budget), so a
+new `Spec` is checked without new test code.
+
 ## Pull requests
 
 - Keep PRs focused: one logical change.

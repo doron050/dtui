@@ -302,3 +302,44 @@ func TestHistoryLoadToleratesCorruptFile(t *testing.T) {
 		t.Fatalf("corrupt file should load empty, got %d entries", len(h.entries))
 	}
 }
+
+// Two different problems, inspectors or vulnerabilities are different
+// history entries — dedup must not collapse them into one.
+func TestHistoryKeepsDistinctRecordPages(t *testing.T) {
+	for _, kind := range []string{"problem", "inspector", "vulnerability"} {
+		page := func(id string) historyEntry {
+			return historyEntry{Stack: []pageRef{{Kind: kind, Title: "t", Rec: map[string]any{
+				"display_id": id, "timestamp": "2026-07-01T00:00:00Z", "vulnerability.id": id}}}}
+		}
+		if page("P-1").signature() == page("P-2").signature() {
+			t.Errorf("%s pages for different records share a signature", kind)
+		}
+	}
+}
+
+// A restored lens index is honored when the view still has that lens, and
+// falls back to the default when the lens set shrank since the entry was saved.
+func TestHistoryRestoresLensWithinBounds(t *testing.T) {
+	a := testApp(t, "hosts")
+	spec := catalog.Lookup("events")
+	n := len(spec.Lenses)
+	for lens, want := range map[int]int{1: 1, n - 1: n - 1, n: 0} {
+		v, err := a.viewFromRef(pageRef{Kind: "table", View: "events", Lens: lens}, a.tf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := v.(*tableView).scope.Lens; got != want {
+			t.Errorf("table lens %d restored as %d, want %d", lens, got, want)
+		}
+	}
+	m := len(catalog.SessionTimelineLenses)
+	for lens, want := range map[int]int{1: 1, m - 1: m - 1, m: 0} {
+		v, err := a.viewFromRef(pageRef{Kind: "timeline", Arg: "sess-1", Lens: lens}, a.tf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := v.(*timelineView).lens; got != want {
+			t.Errorf("timeline lens %d restored as %d, want %d", lens, got, want)
+		}
+	}
+}

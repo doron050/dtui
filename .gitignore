@@ -1,6 +1,8 @@
 bin/
 dtui
 dtctl-tui
+coverage.out
+mutation.json
 *.test
 .obsidian/
 .dtui.yaml

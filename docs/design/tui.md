@@ -975,6 +975,13 @@ implementation landed on cheaper, less brittle seams.)
 - **Datasource tests**: no HTTP anywhere — the `dataSource.runFn` func seam
   replaces the executor, and API-backed views stub the injected `Source`
   closures. Canned rows are injected via `seedRows`.
+- **Catalog-wide invariants**: `adr_invariants_test.go` walks every `Spec`
+  and asserts the vision/ADR rules once: both exits (`c` echoes `dtctl`, `o`
+  has a web target), and the query budget (one primary query per open,
+  metadata not re-paid, backtracking free).
+- **Mutation testing**: `make mutation-diff` (CI, changed lines) and
+  `make mutation` (weekly) run gremlins to check that tests assert logic,
+  not just execute it. See CONTRIBUTING.md.
 
 ---
 
