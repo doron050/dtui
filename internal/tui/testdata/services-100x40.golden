@@ -1,0 +1,40 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                   last 2h
+ services ─────────────────────────────────────────────────────────────────────────────────────────
+ 2 rows · 1s
+ NAME                             REQUESTS         FAILED           ID                          SEEN
+▌OrderController                  ⣀⣀⣀⣀⣀⣀⣀⡼     12  ⣀⣀⣀⣀⣀⡖⢦⡼      1  SERVICE-0000000000000A01     23d
+ storefront-web                   ⣀⣀⣀⣀⣀⣀⣀⡼     71  ⣀⣀⣀⣀⣀⣀⡼⠉      5  SERVICE-0000000000000A02     23d
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ OrderController
+  SERVICE  SERVICE-0000000000000A01
+
+  id: SERVICE-0000000000000A01
+  detection: 1
+  first seen: Jun 21 15:43
+  last seen: 06:11:00
+
+
+ enter details  d record  l logs  s traces  m metrics  p problems  v events  / filter  f facets  J/…
+ ≡ dtctl query 'timeseries { req = sum(dt.service.request.count, scalar: true), faas = sum(dt.servi…

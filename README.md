@@ -165,6 +165,12 @@ dtctl auth login                                        # sign in
 
 Pick one.
 
+**Homebrew** (macOS and Linux):
+
+```bash
+brew install dynatrace-oss/tap/dtui
+```
+
 **Build from source** (a clone of this repository):
 
 ```bash

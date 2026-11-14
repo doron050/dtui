@@ -1,0 +1,50 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                                                                               last 2h
+ traces › trace 00000000… ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 2.45s · 6 spans · ✗ 2 failed                                                                                 │ /api/checkout
+▌✗ POST /api/checkout ⟨HTTP 500⟩  server   storefront-web         ████████████████████████████████     2.45s  │
+ └─ CheckoutController/checkout   server   ● storefront-web       ███████████████████████████████┄     2.44s  │  status: failed
+    ├─ SELECT shop.cart           ⛁ db     ● storefront-web       █┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄    20.0ms  │  duration: 2.45s
+    ├─ POST /api/orders           client   ● storefront-web       ████┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄   350.0ms  │  http: POST 500
+    │  └─ POST /api/orders        server   ● OrderController      ████┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄   334.0ms  │  url: /api/checkout
+    └─ ✗ POST /v1/charges ⟨HTTP … client   ● storefront-web       ┄┄┄┄┄██████████████████████████┄     2.03s  │  service: storefront-web
+                                                                                                              │  kind: server
+                                                                                                              │  start: 11:59:39
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ enter span attributes  l trace logs  x topology  y yank trace id  o open  : views  t timeframe  S segments  r refresh  esc back  ? help  q quit
+ ≡ dtctl query 'fetch spans, from:toTimestamp("2026-07-15T11:44:39.500Z"), to:toTimestamp("2026-07-15T12:14:39.500Z") | filter trace.id == toUid("0000000000000…

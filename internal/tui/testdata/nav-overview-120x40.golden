@@ -1,0 +1,40 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                                       last 2h
+ smartscape ───────────────────────────────────────────────────────────────────────────────────────────────────────────
+ smartscape  9 types · 327750 entities
+▌PROCESS                                                  99547         │ PROCESS
+ CONTAINER                                                81405         │ 99547 entities
+ AZURE_MICROSOFT_DBFORPOSTGRESQL_FLEXIBLESERVERS_CONFIG…  57055         │
+ K8S_POD                                                  47857         │ ▍ outgoing
+ K8S_SECRET                                               28813         │   calls ▸ PROCESS                    288610
+ SERVICE                                                   9120         │   runs on ▸ HOST                      99506
+ HOST                                                      2731         │   runs on ▸ CONTAINER                 61230
+ K8S_NODE                                                  1144         │   belongs to ▸ PROCESS_GROUP          58117
+ K8S_CLUSTER                                                 78         │
+                                                                        │ ▍ incoming
+                                                                        │   calls ◂ PROCESS                    288610
+                                                                        │   runs on ◂ SERVICE                   12044
+                                                                        │
+                                                                        │
+                                                                        │
+                                                                        │
+                                                                        │
+                                                                        │
+                                                                        │
+                                                                        │
+                                                                        │
+                                                                        │
+                                                                        │
+                                                                        │
+                                                                        │
+                                                                        │
+                                                                        │
+                                                                        │
+                                                                        │
+                                                                        │
+                                                                        │
+                                                                        │
+                                                                        │
+                                                                        │
+                                                                        │
+ enter browse type  / filter  : views  t timeframe  S segments  r refresh  ? help  q quit
+ ≡ dtctl query 'smartscapeNodes "*" | summarize count = count(), by:{type} | sort count desc | limit 200'

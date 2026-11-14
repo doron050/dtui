@@ -44,6 +44,10 @@ func (b *previewBuilder) classed(label, value, class string) {
 // PreviewTitle returns the headline for a record's preview pane — the most
 // specific identity its kind offers ("" lets the caller probe generic keys).
 func PreviewTitle(rec map[string]any) string {
+	return SafeText(previewTitle(rec))
+}
+
+func previewTitle(rec map[string]any) string {
 	switch {
 	case Str(rec, "event.kind") == "DAVIS_PROBLEM":
 		return joinNonEmpty(" ", Str(rec, "display_id"), Str(rec, "event.name"))
@@ -83,6 +87,14 @@ func isAttackRecord(rec map[string]any) bool {
 // without a curated treatment (the caller falls back to the generic
 // priority-field rendering). Discriminators mirror PriorityFields.
 func PreviewFacts(rec map[string]any) []PreviewFact {
+	facts := previewFacts(rec)
+	for i := range facts {
+		facts[i].Value = SafeText(facts[i].Value)
+	}
+	return facts
+}
+
+func previewFacts(rec map[string]any) []PreviewFact {
 	switch {
 	case Str(rec, "event.kind") == "DAVIS_PROBLEM":
 		return problemPreview(rec)
@@ -134,11 +146,11 @@ func dashboardPreview(rec map[string]any) []PreviewFact {
 func PreviewValue(key string, val any) string {
 	switch key {
 	case "timestamp", "start_time", "event.start", "event.end":
-		return FormatTime(FormatValue(val))
+		return SafeText(FormatTime(FormatValue(val)))
 	case "duration":
 		return FormatNs(val)
 	}
-	return FormatValue(val)
+	return SafeText(FormatValue(val))
 }
 
 func isSpanRecord(rec map[string]any) bool {

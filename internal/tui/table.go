@@ -470,8 +470,14 @@ func (v *tableView) setFilter(f string) {
 }
 
 func (v *tableView) Echo() string {
-	if v.spec.API != "" && v.spec.Echo != nil {
-		return v.spec.Echo(v.scope, v.dql)
+	// A dedicated DQL-view command knows only the Scope; once searches,
+	// facets or segments narrow the list, only the composed query is
+	// equivalent to what is shown.
+	narrowed := v.spec.API == "" && len(v.searches)+len(v.facets)+len(v.ds.segments) > 0
+	if v.spec.Echo != nil && !narrowed {
+		if echo := v.spec.Echo(v.scope, v.dql); echo != "" || v.spec.API != "" {
+			return echo
+		}
 	}
 	if v.dql == "" {
 		return ""
@@ -651,6 +657,9 @@ func (v *tableView) Update(msg tea.Msg) tea.Cmd {
 		v.err = msg.err
 		if msg.err == nil {
 			v.all = msg.records
+			if v.spec.Decode != nil {
+				v.all = v.spec.Decode(v.all)
+			}
 			// Stamp any warm derived fields (e.g. resolved Azure subscription
 			// names) in place — no-op when a cache is cold or no row matches; the
 			// derivedOwner broadcast re-enriches once a lookup lands.
@@ -871,7 +880,12 @@ func (v *tableView) handleKey(msg tea.KeyMsg) tea.Cmd {
 				} else if e := v.entityOf(rec); e != nil {
 					scope.Entity = e
 				}
-				return func() tea.Msg { return pushViewMsg{spec: target, scope: scope} }
+				msg := pushViewMsg{spec: target, scope: scope}
+				if v.spec.EnterInheritsScope {
+					msg.scope.Entity, msg.scope.Entities = v.scope.Entity, v.scope.Entities
+					msg.searches, msg.facets = v.searches, v.facets
+				}
+				return func() tea.Msg { return msg }
 			}
 		}
 		// Entity rows open the tabbed detail page; signal rows (logs,
@@ -1129,7 +1143,7 @@ func (v *tableView) renderRow(i int, widths []int, width int) string {
 
 	var cells []string
 	for ci, c := range v.columns() {
-		text := cell(c.Text(rec), widths[ci], c.Right)
+		text := cell(c.TextAt(rec, widths[ci]), widths[ci], c.Right)
 		if !selected && c.Class != nil {
 			if class := c.Class(strings.TrimSpace(text)); class != "" {
 				text = theme.Class(class, text)
@@ -1160,6 +1174,52 @@ func (v *tableView) columnWidths(total int) []int {
 		}
 	}
 	gaps := 2 * (len(cols) - 1)
+
+	colFloor := func(c catalog.Column) int {
+		return min(c.Width, max(max(4, lipgloss.Width(c.Title)), c.Min))
+	}
+
+	// When fixed columns alone won't fit, shrink them proportionally toward a
+	// floor (header text, or a column's declared Min) before flex columns
+	// starve — otherwise the rightmost columns are truncated off the edge
+	// entirely and a flex column floors at 8 cells while a fixed column keeps
+	// its full width.
+	const flexMin = 8
+	budget := total - gaps - flexMin*flexCount
+	if fixed > 0 && fixed > budget {
+		if budget < 0 {
+			budget = 0
+		}
+		scale := float64(budget) / float64(fixed)
+		sum := 0
+		for i, c := range cols {
+			if c.Width == 0 {
+				continue
+			}
+			widths[i] = max(colFloor(c), int(float64(c.Width)*scale))
+			sum += widths[i]
+		}
+		// Floor hits and truncation leave the sum over or under budget:
+		// shave the widest shrinkable column until it fits.
+		for sum > budget {
+			widest := -1
+			for i, c := range cols {
+				if c.Width == 0 {
+					continue
+				}
+				if widths[i] > colFloor(c) && (widest < 0 || widths[i] > widths[widest]) {
+					widest = i
+				}
+			}
+			if widest < 0 {
+				break
+			}
+			widths[widest]--
+			sum--
+		}
+		fixed = sum
+	}
+
 	remaining := total - fixed - gaps
 	if flexCount > 0 {
 		per := remaining / flexCount

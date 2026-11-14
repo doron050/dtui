@@ -63,6 +63,7 @@ type fakeSLOAPI struct {
 	evals   map[string]*slo.EvaluationResponse
 	evalErr map[string]error
 	polls   map[string][]*slo.EvaluationResponse // token → response sequence
+	pollMs  []int
 }
 
 func (f *fakeSLOAPI) List(string, int64) (*slo.SLOList, error) { return f.list, f.listErr }
@@ -74,7 +75,8 @@ func (f *fakeSLOAPI) Evaluate(id string) (*slo.EvaluationResponse, error) {
 	return f.evals[id], nil
 }
 
-func (f *fakeSLOAPI) PollEvaluation(token string, _ int) (*slo.EvaluationResponse, error) {
+func (f *fakeSLOAPI) PollEvaluation(token string, ms int) (*slo.EvaluationResponse, error) {
+	f.pollMs = append(f.pollMs, ms)
 	seq := f.polls[token]
 	if len(seq) == 0 {
 		return nil, errors.New("unexpected poll for " + token)
@@ -138,6 +140,10 @@ func TestSLOEvaluationPollsThroughTokenRotation(t *testing.T) {
 	mergeSLOEvaluation(context.Background(), api, rec, "slo-1")
 	if rec["status"] != "FAILURE" {
 		t.Fatalf("poll chain did not deliver the result: %+v", rec)
+	}
+	// Each long-poll is capped at 5s even though the 12s budget is larger.
+	if len(api.pollMs) != 2 || api.pollMs[0] != 5000 || api.pollMs[1] != 5000 {
+		t.Fatalf("poll waits = %v, want two 5000ms polls", api.pollMs)
 	}
 }
 
@@ -372,6 +378,8 @@ func TestLogPatternSourceComposesAndSorts(t *testing.T) {
 			{"pattern": "quiet", "numberOfMatches": float64(3)},
 			{"pattern": "busy", "numberOfMatches": "1200"}, // Grail stringifies longs
 			{"pattern": "middling", "numberOfMatches": float64(40)},
+			{"pattern": "tie-a", "numberOfMatches": float64(7)},
+			{"pattern": "tie-b", "numberOfMatches": "7"},
 		},
 	}}}
 	scope := catalog.Scope{Timeframe: catalog.Timeframe{Label: "2h"}}
@@ -385,7 +393,12 @@ func TestLogPatternSourceComposesAndSorts(t *testing.T) {
 	if q, _ := api.gotInput["logQuery"].(string); !strings.HasPrefix(q, "fetch logs") {
 		t.Fatalf("composed logQuery = %q", q)
 	}
-	if got := []string{records[0]["pattern"].(string), records[1]["pattern"].(string), records[2]["pattern"].(string)}; got[0] != "busy" || got[1] != "middling" || got[2] != "quiet" {
+	var got []string
+	for _, r := range records {
+		got = append(got, r["pattern"].(string))
+	}
+	// Busiest first; equal counts keep the analyzer's order.
+	if strings.Join(got, ",") != "busy,middling,tie-a,tie-b,quiet" {
 		t.Fatalf("patterns not sorted by matches (string counts must not sort as 0): %v", got)
 	}
 

@@ -1,0 +1,50 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                                                                               last 2h
+ HOST ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ HOST  6 entities
+▌· ip-10-0-4-30.ec2.internal  HOST-0000000000000B01                                                             │ ip-10-0-4-30.ec2.internal
+ · ip-10-0-4-12.ec2.internal  HOST-0000000000000B02                                                             │  HOST  HOST-0000000000000B01
+ · ip-10-0-5-201.ec2.internal  HOST-0000000000000B03                                                            │
+ · aks-system-31337-vmss000004  HOST-0000000000000B04                                                           │ no active problems (24h)
+ · gke-demo-pool-1-a1b2c3d4-x9k2  HOST-0000000000000B05                                                         │
+ · win-build-agent-07  HOST-0000000000000B06                                                                    │ ▍ key facts
+                                                                                                                │   id: HOST-0000000000000B01
+                                                                                                                │   os: LINUX · Amazon Linux 2 (kernel 5.10.23…
+                                                                                                                │   cpu: 16 logical / 8 physical
+                                                                                                                │   memory: 30.0 GiB
+                                                                                                                │   ip: 203.0.113.78,10.0.4.30
+                                                                                                                │   public ip: 203.0.113.78
+                                                                                                                │   cloud: aws us-east-1a
+                                                                                                                │   hypervisor: AWS_NITRO
+                                                                                                                │   first seen: Jul 01 11:29
+                                                                                                                │   last seen: 11:45:00
+                                                                                                                │
+                                                                                                                │
+                                                                                                                │
+                                                                                                                │
+                                                                                                                │
+                                                                                                                │
+                                                                                                                │
+                                                                                                                │
+                                                                                                                │
+                                                                                                                │
+                                                                                                                │
+                                                                                                                │
+                                                                                                                │
+                                                                                                                │
+                                                                                                                │
+                                                                                                                │
+                                                                                                                │
+                                                                                                                │
+                                                                                                                │
+                                                                                                                │
+                                                                                                                │
+                                                                                                                │
+                                                                                                                │
+                                                                                                                │
+                                                                                                                │
+                                                                                                                │
+                                                                                                                │
+                                                                                                                │
+                                                                                                                │
+ enter walk  d details  / filter  . pin  o open  : views  t timeframe  S segments  r refresh  ? help  q quit
+ ≡ dtctl query 'smartscapeNodes "HOST" | fieldsAdd display = coalesce(if(name != "", name), `tags:aws`[`Name`], aws.arn) | fields id, name, display, type | sor…

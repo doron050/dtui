@@ -1,0 +1,24 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                               last 2h
+ walk (ip-10-0-4-30.ec2.internal) ─────────────────────────────────────────────
+ ip-10-0-4-30.ec2.internal
+▌· ip-10-0-4-30.ec2.internal  HOST · 11 relations
+ ▾ runs on → (1)
+    · AWS_EC2_INSTANCE       i-0123456789abcdef0
+ ▾ ← runs on (10)
+    · CONTAINER              orders-api
+    · CONTAINER              storefront-web
+    · PROCESS                java orders-api
+    · PROCESS                node storefront-web
+    · PROCESS                OneAgent network monitor
+    · PROCESS                containerd
+    · PROCESS                kubelet
+    · PROCESS                python3 report-worker
+    · PROCESS                envoy
+    · PROCESS                nginx
+
+
+
+
+
+ enter walk to  ← back  d details  z fold  i direction  M mesh  / filter  : vie…
+ ≡ dtctl query 'smartscapeEdges "*" | filter source_id == toSmartscapeId("HOST-…

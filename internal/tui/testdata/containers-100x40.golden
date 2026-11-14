@@ -1,0 +1,40 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                   last 2h
+ containers ───────────────────────────────────────────────────────────────────────────────────────
+ 4 rows · 1s
+ NAME         CPU           MEM             IMAGE                      POD                      SEEN
+▌activegate   ⢤⣠⠶⢤⣀⡖⠲⢤ 40m  ⣀⡤⠤⠖⠒ 600.8MiB  activegate:1.349.62-raw    dynakube-activegate-0     29d
+ coredns      ⣀⣠⠶⣄⣀⣀⡴⢦  2m  ⣀⣀⡴⣆⣀⡼ 21.0MiB  mirrored-coredns-coredns…  coredns-5c6d7e8f9a-p9r…   29d
+ order-serv…  ⣀⡤⠖⠒⠲⠤⠤ 205m  ⣀⡴⠒⠦⠤ 448.2MiB  order-service:2.14.0       order-service-7d9f8b6c…   29d
+ otel-colle…  ⢤⣀⡤⠤⠖⢦⣀⣠ 15m  ⣀⡤⠴⠲⠤⠞ 88.7MiB  opentelemetry-collector-…  otel-collector-6b7c8d9…   29d
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ activegate
+  CONTAINER  CONTAINER-0000000000000E01
+
+  id: CONTAINER-0000000000000E01
+  image: activegate:1.349.62-raw
+  pod: dynakube-activegate-0
+  namespace: dynatrace
+  node: ip-10-0-1-17
+ … (enter opens the full record)
+ enter details  d record  l logs  s traces  m metrics  p problems  v events  / filter  f facets  J/…
+ ≡ dtctl query 'smartscapeNodes "CONTAINER" | fieldsRemove references | sort name asc | limit 500'

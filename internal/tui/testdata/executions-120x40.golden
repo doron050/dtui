@@ -1,0 +1,40 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                                       last 2h
+ executions ───────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 5 rows · 1s                                                          │ checkout journey (Frankfurt)
+  all    runs    steps    failed                                      │
+ TIME   MONITOR      EVENT        STATE  STATUS  STEP        DURATION │  state: SUCCESS
+▌11:5…  checkout j…  browser mo…  SUCC…  Succe…  Click on …       0µs │  event: browser monitor step execution
+ 11:5…  checkout j…  browser mo…  SUCC…  Succe…  Navigate …     1.41s │  step: Click on "Checkout"
+ 11:4…  checkout j…  browser mo…  SUCC…  Succe…                 9.37s │  message
+ 11:4…  login endp…  http monit…  FAIL   HTTP …                 1.20s │   Success
+ 11:4…  api health…  http monit…  SUCC…  Succe…                87.0ms │  duration: 0µs
+                                                                      │  at: 11:50:01
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ tab lens  enter inspect  / filter  f facets  J/K sort  : views  t timeframe  S segments  r refresh  ? help  q quit
+ ≡ dtctl query 'fetch dt.synthetic.events, from:now() - 2h | fieldsAdd dt.system.bucket | sort timestamp desc | limit 3…

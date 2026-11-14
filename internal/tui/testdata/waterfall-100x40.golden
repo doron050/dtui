@@ -1,0 +1,40 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                   last 2h
+ traces › trace 00000000… ─────────────────────────────────────────────────────────────────────────
+ 2.45s · 6 spans · ✗ 2 failed
+▌✗ POST /api/checkout ⟨HT… server   storefront-web         ██████████████████████████████     2.45s
+ └─ CheckoutController/ch… server   ● storefront-web       █████████████████████████████┄     2.44s
+    ├─ SELECT shop.cart    ⛁ db     ● storefront-web       █┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄    20.0ms
+    ├─ POST /api/orders    client   ● storefront-web       ████┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄   350.0ms
+    │  └─ POST /api/orders server   ● OrderController      ████┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄   334.0ms
+    └─ ✗ POST /v1/charges… client   ● storefront-web       ┄┄┄┄████████████████████████┄┄     2.03s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ /api/checkout
+
+  status: failed
+  duration: 2.45s
+  http: POST 500
+  url: /api/checkout
+  service: storefront-web
+  kind: server
+  start: 11:59:39
+ enter span attributes  l trace logs  x topology  y yank trace id  o open  : views  t timeframe  S …
+ ≡ dtctl query 'fetch spans, from:toTimestamp("2026-07-15T11:44:39.500Z"), to:toTimestamp("2026-07-…

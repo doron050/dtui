@@ -62,7 +62,7 @@ SOFTWARE.
 
 
 ================================================================================
-github.com/andybalholm/brotli v1.1.1 (MIT)
+github.com/andybalholm/brotli v1.2.7 (MIT)
 ================================================================================
 
 --- LICENSE ---
@@ -1919,7 +1919,7 @@ SOFTWARE.
 
 
 ================================================================================
-github.com/klauspost/compress v1.18.7 (Apache-2.0 AND BSD-3-Clause AND MIT)
+github.com/klauspost/compress v1.20.2 (Apache-2.0 AND BSD-3-Clause AND MIT)
 ================================================================================
 
 --- LICENSE ---
@@ -4761,7 +4761,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 ================================================================================
-golang.org/x/sys v0.49.0 (BSD-3-Clause)
+golang.org/x/sys v0.50.0 (BSD-3-Clause)
 ================================================================================
 
 --- LICENSE ---
@@ -4796,7 +4796,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 ================================================================================
-golang.org/x/term v0.47.0 (BSD-3-Clause)
+golang.org/x/term v0.48.0 (BSD-3-Clause)
 ================================================================================
 
 --- LICENSE ---
@@ -4976,7 +4976,7 @@ limitations under the License.
 
 
 ================================================================================
-go-standard-library 1.26.10 (BSD-3-Clause)
+go-standard-library 1.26.11 (BSD-3-Clause)
 ================================================================================
 
 --- LICENSE ---

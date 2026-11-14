@@ -1,0 +1,76 @@
+name: mutation
+
+# Mutation testing (gremlins): flips operators and conditions in the code and
+# checks that some test fails. Line coverage says a line ran; this says a
+# test would notice if its logic were wrong. See CONTRIBUTING.md.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - '.gremlins.yaml'
+      - 'makefile'
+      - 'scripts/mutation-report.sh'
+      - '.github/workflows/mutation.yml'
+  schedule:
+    - cron: '41 3 * * 0' # weekly full report
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mutation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changed-lines:
+    name: Mutation (changed lines)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # --diff needs the merge base
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Mutation test the diff
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: make mutation-diff MUTATION_BASE="origin/$BASE_REF"
+
+  full:
+    name: Mutation (full report)
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Mutation test the module
+        run: make mutation
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mutation-report
+          path: mutation.json
+          if-no-files-found: ignore

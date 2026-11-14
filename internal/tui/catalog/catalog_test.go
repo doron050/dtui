@@ -52,6 +52,34 @@ func TestMatchRanksPrefixFirst(t *testing.T) {
 	}
 }
 
+// The command bar lists exactly the views whose name or alias contains the
+// typed letters in order, best tier first: exact, then prefix, then
+// subsequence. Views that don't match must not appear at all.
+func TestMatchSpecsTiersAndExcludes(t *testing.T) {
+	hosts := &Spec{Name: "hosts", Aliases: []string{"ho"}}
+	home := &Spec{Name: "home"}
+	hotspots := &Spec{Name: "network-hotspots"}
+	logs := &Spec{Name: "logs"}
+	candidates := []*Spec{logs, hotspots, home, hosts}
+
+	for _, tc := range []struct {
+		input string
+		want  []string
+	}{
+		{"ho", []string{"hosts", "home", "network-hotspots"}},
+		{"hom", []string{"home"}},
+		{"zq", nil},
+	} {
+		var got []string
+		for _, s := range MatchSpecs(candidates, tc.input) {
+			got = append(got, s.Name)
+		}
+		if strings.Join(got, ",") != strings.Join(tc.want, ",") {
+			t.Errorf("MatchSpecs(%q) = %v, want %v", tc.input, got, tc.want)
+		}
+	}
+}
+
 // The query templates are the contract between navigation and Grail: these
 // tests pin the exact DQL that scope composition produces.
 func TestProblemsQueryComposition(t *testing.T) {

@@ -88,7 +88,20 @@ var modulesSpec = &Spec{
 	// events; 'l' opens the module's own log files, scoped by host + the module's
 	// subdirectory under /var/log/dynatrace/oneagent (agentLogFilter), never the
 	// process's application logs.
-	Drills: map[string]string{"l": "agentlogs", "v": "events"},
+	// 'b' opens the Live Debugger snapshots captured in the monitored process.
+	Drills: map[string]string{"l": "agentlogs", "v": "events", "b": "snapshots"},
+}
+
+// liveDebuggerState renders dt.agent.live_debugger.enabled as on/off ("" when
+// the module does not report it).
+func liveDebuggerState(rec map[string]any) string {
+	switch strings.ToLower(FormatValue(rec["dt.agent.live_debugger.enabled"])) {
+	case "true":
+		return "on"
+	case "false":
+		return "off"
+	}
+	return ""
 }
 
 // fleetLenses split the fleet view by edge-component type. OneAgents are the
@@ -438,6 +451,7 @@ var fleetModuleStateColumns = []Column{
 	{Title: "HEALTH", Field: "dt.agent.module.health", Width: 9, Class: classAgentHealth},
 	{Title: "VERSION", Field: "dt.agent.module.version", Width: 18},
 	{Title: "INJECT", Field: "dt.agent.module.injection_mode", Width: 7},
+	{Title: "LD", Width: 3, Value: liveDebuggerState},
 	{Title: "MODULE ID", Field: "dt.agent.module.id", Width: 16},
 	{Title: "SEEN", Width: 5, Right: true, Value: func(rec map[string]any) string { return Age(Str(rec, "timestamp")) }},
 }

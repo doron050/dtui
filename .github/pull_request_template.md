@@ -18,3 +18,10 @@ Closes #
 - [ ] `make fmt lint test` passes
 - [ ] New DQL was validated against a live tenant and returns rows
 - [ ] Tests use synthetic identifiers only (no real tenant names, URLs, or IDs)
+
+## Codebase hygiene ([AGENTS.md](../AGENTS.md))
+
+- [ ] Reuses the shared helpers instead of adding feature-local copies; new shared helpers are added to the AGENTS.md reuse table
+- [ ] Docs that this change makes stale are updated (AGENTS.md, docs/, README keys, `?` help)
+- [ ] New Grail facts are in `docs/dev/learnings.md`; ripple-wide decisions have an ADR; shortcuts left behind are in `docs/dev/tech-debt.md`
+- [ ] Reviewed with the [review-pr](../.agents/skills/review-pr/SKILL.md) skill — or not needed for this change

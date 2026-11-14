@@ -1,0 +1,24 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                               last 2h
+ problems › P-26071542 ────────────────────────────────────────────────────────
+ P-26071542  Kubernetes node not ready
+ ● ACTIVE  ·  SEV2  ·  started 18m ago  ·  1 affected entity  ·  ⧖ 11:37 → now
+  1 overview   2 evidence (2)   3 logs   4 traces   5 events   6 details
+────────────────────────────────────────────────────────────────────────────────
+ 2 rows · 0s
+ START      RC  SEV   TYPE                  NAME      STATUS  SOURCE
+▌11:43:00   ✱   SEV2  KUBERNETES_NODE_NOT…  Kuberne…  ACTIVE
+ 11:42:00             PROCESS_RESTART       Process…  CLOSED
+
+
+
+
+
+
+
+
+
+
+
+
+ 1-9/tab tabs  enter inspect  l logs  m metrics  p problems  / filter  f facets…
+ ≡ dtctl query 'fetch dt.davis.events, from:toTimestamp("2026-07-15T10:37:00.00…

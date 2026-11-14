@@ -1,0 +1,40 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                   last 2h
+ sessions › session 73402155… ─────────────────────────────────────────────────────────────────────
+ 2.84s · 8 events · ✗ 2 failed · storefront
+  1 · journey   2 · requests   3 · errors   4 · all
+▌/checkout                                        page     ██████████████████████████████     2.84s
+   /checkout                                      nav      ██████████████┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄     1.41s
+ /checkout                                        view     █████████████████████████████┄     2.84s
+   Loading of page /checkout                      action   ███████████████████┄┄┄┄┄┄┄┄┄┄┄     1.81s
+     GET /api/cart → 200                          request  ┄┄█┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄   127.0ms
+     POST /api/checkout/quote → 200               request  ┄┄┄┄█┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄   133.1ms
+     ✗ POST /api/checkout/submit → 503            request  ┄┄┄┄┄┄┄┄█┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄   117.9ms
+     ✗ Error: checkout submit failed (503)        error    ┄┄┄┄┄┄┄┄┄█┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄       0µs
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ /checkout
+
+  kind: page_summary
+  view: /checkout
+  app: storefront
+  duration: 2.84s
+  start: 11:31:45
+
+
+ tab/1-4 lens  enter event record  d session record  e events table  x relations  o open  : views  …
+ ≡ dtctl query 'fetch user.events, from:now() - 24h | filter dt.rum.session.id == "7340215598812744…

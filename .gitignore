@@ -1,10 +1,13 @@
 bin/
 dtui
 dtctl-tui
+coverage.out
+mutation.json
 *.test
 .obsidian/
 .dtui.yaml
-.claude/
+.claude/*
+!.claude/skills
 
 # mac
 .DS_Store
@@ -21,3 +24,4 @@ extension/wasm_exec.js
 
 # Playwright MCP scratch (page snapshots, console logs)
 .playwright-mcp/
+completions/

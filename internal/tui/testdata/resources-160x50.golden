@@ -1,0 +1,50 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                                                                               last 2h
+ resources ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 5 rows · 1s                                                                                                  │ resources
+ NAME                                           TYPE                        REGION        ACCOUNT        SEEN │  AWS_EC2_VOLUME  AWS_EC2_VOLUME-0000000000000A71
+▌AWS_EC2_VOLUME-0000000000000A71                ec2 volume                  us-east-1     000000000001    49d │
+ $default                                       apigatewayv2 stage          us-east-1     000000000002    50d │  id: AWS_EC2_VOLUME-0000000000000A71
+ $default                                       apigatewayv2 stage          us-east-1     000000000002    29d │  region: us-east-1
+ orders-export-handler                          lambda function             eu-central-1  000000000002    39d │  account: 000000000001
+ orders-db-replica-2                            rds dbinstance              eu-central-1  000000000003    40d │  first seen: May 26 12:14
+                                                                                                              │  last seen: 11:48:00
+                                                                                                              │  tags:aws
+                                                                                                              │   Environment: dev
+                                                                                                              │   Name
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ enter details  d record  l logs  s traces  m metrics  p problems  v events  / filter  f facets  J/K sort  : views  t timeframe  S segments  r refresh  ? help …
+ ≡ dtctl query 'smartscapeNodes "*" | fieldsAdd display = coalesce(if(name != "", name), `tags:aws`[`Name`], azure.resource.name, aws.arn, azure.resource.id) |…

@@ -1,0 +1,40 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                   last 2h
+ problems ─────────────────────────────────────────────────────────────────────────────────────────
+ 5 rows · 1s
+ ID          STATUS  CATEGORY              TITLE                   AFFECTED                    AGE
+▌P-26071546  ACTIVE  CUSTOM_ALERT          Ingest volume above f…  demo-environment            8m
+ P-26071542  ACTIVE  AVAILABILITY          Kubernetes node not r…  aks-system-31337-vmss0000…  18m
+ P-26071541  CLOSED  CUSTOM_ALERT          Synthetic availabilit…  demo-environment            19m
+ P-26071538  ACTIVE  ERROR                 Failure rate increase   OrderController +2          40m
+ P-26071533  ACTIVE  RESOURCE_CONTENTION   Memory saturation       ip-10-0-4-30.ec2.internal   1h
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ P-26071546 Ingest volume above forecast for log bucket default_logs
+
+  status: ACTIVE
+  category: CUSTOM_ALERT
+  active: 8m (since 11:52:00)
+  affected: demo-environment
+
+
+
+ enter inspect  l logs  s traces  m metrics  v events  / filter  f facets  J/K sort  : views  t tim…
+ ≡ dtctl query 'fetch dt.davis.problems, from:now() - 2h | fieldsAdd dt.system.bucket | filter not(…

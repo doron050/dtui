@@ -164,6 +164,8 @@ unbounded). Opened via drill-down they inherit the selection's scope.
 | Security | `:security`, `:vulns` | `security.events` | vulnerabilities: DSS score + Davis badges (exposure/exploit/fix), open·muted·all lenses, entity pins; enter → tabbed page (overview · entities · attacks · entry points · timeline · details), markdown description via glamour |
 | Attacks | `:attacks`, `:rap` | `security.events` | Runtime Application Protection detections: Blocked/Audited verdicts, payloads, source IPs, `s` → trace waterfall, entity drills |
 | RUM sessions | `:sessions` | `user.sessions` | per-app user sessions, duration, errors; session detail = action timeline |
+| Live Debugger breakpoints | `:breakpoints`, `:bp` | `application.snapshots` | breakpoints that *fired* in the timeframe, derived from their snapshots (location, function, hits, hosts, last hit); enter → that breakpoint's snapshots. Configuration and rollout status are not shown — the workspace lookup can create a workspace, and breakpoint writes stay in `dtctl` |
+| Live Debugger snapshots | `:snapshots`, `:snap` | `application.snapshots` | newest-first hit stream; payloads decoded with dtctl's decoder — the inspector shows `variables` (the hit frame's locals) and `stacktrace` first; `c` copies `dtctl get snapshots <id> --decode-snapshots`; entity/logs/events/trace drills |
 | Costs | `:costs`, `:dps` | `dt.system.events` | DPS consumption by capability/entity, trend |
 
 ### Management views (assets — secondary)
@@ -867,6 +869,28 @@ for the session (refreshed on context switch). This keeps the ViewSpec catalog
 small and honest: curated defaults where curation adds value, introspection
 everywhere else.
 
+### Relationship to dtctl
+
+dtui is its own module (`github.com/dynatrace-oss/dtui`) and a pure
+**consumer** of the published `dtctl` modules (ADR-0004, ADR-0005):
+
+- It reads dtctl's config (`~/.config/dtctl/config`) and keyring **without ever
+  writing them**. Contexts are created/managed with `dtctl ctx set`. A
+  `--context` flag or `DTCTL_CONTEXT` env override is applied in memory only
+  (session-local) — an open TUI must never repoint other dtctl processes.
+- It imports dtctl's `sdk/session` (config, credentials, client), `pkg/exec`
+  (DQL executor), `pkg/resources/*` (SLO/detector/analyzer/segment handlers),
+  and `pkg/output` renderers. **No business logic is forked** — the TUI is a
+  presentation layer.
+- The charmbracelet/bubbletea dependencies live in this module only; dtctl's
+  root module and SDK stay TUI-free. The dtctl module versions are pinned
+  to released tags in `go.mod` (plain `require`, no `replace`).
+
+`main.go` and `sources.go` are the wiring seam: they construct the tenant
+client and adapt dtctl resource handlers into `tui.Source` closures, so that
+**`internal/tui` never does HTTP itself**. Follow this — new API-backed views
+get a source constructor in `sources.go`, tested with an interface stub.
+
 ### Package layout
 
 ```text
@@ -888,12 +912,14 @@ internal/tui/
   datasource.go          # async adapters: pkg/exec + resource calls → tea.Cmd/tea.Msg
 ```
 
-Rules, mirroring existing layering: `internal/tui` imports dtctl's
-`pkg/resources`, `pkg/exec`, `pkg/output` (renderers) and the SDK's
-`sdk/session` (config, credentials, client, safety); nothing imports
-`internal/tui` except the `dtui` main package; no HTTP in `internal/tui`;
-every API call is a `tea.Cmd` goroutine with `context.Context` cancellation
-tied to view lifetime.
+Rules, mirroring existing layering (`invariants_test.go` enforces the
+imports): `internal/tui` imports only dtctl's `pkg/exec` (DQL executor) and
+`pkg/output` (renderers); `main.go` and `sources.go` use `sdk/session` and
+`pkg/resources` and hand the TUI injected `Source` closures; nothing imports
+`internal/tui` except the `dtui` main package and `cmd/web`; no HTTP in
+`internal/tui`; every API call is a `tea.Cmd` goroutine, and stale results
+are dropped by `(owner, seq)` rather than by cancellation (see
+[learnings.md](../dev/learnings.md) section 3).
 
 ### Refresh & data handling
 
@@ -906,6 +932,9 @@ tied to view lifetime.
   query flags" principle.
 - Signal views opened without any scope prompt for one (entity picker) rather
   than running an unbounded query.
+- Record strings are display-sanitized, never rewritten: `catalog.SafeText`
+  at the points where values turn into display text, and `sanitizeFrame` on
+  the finished frame. Raw values still drive queries and yank.
 
 ### Testing
 
@@ -921,12 +950,38 @@ implementation landed on cheaper, less brittle seams.)
   the tests pin the DQL shape with substring checks — catching
   scope-composition regressions cheaply.
 - **View assertions**: `View(w, h)` output is checked for content and
-  classification via `ansi.Strip` + substring matching — no golden files, so
-  styling and layout tweaks don't invalidate tests. Synthetic data only, per
-  the privacy rules.
+  classification via `ansi.Strip` + substring matching — these pin *what* a
+  view shows, not how it looks. Synthetic data only, per the privacy rules.
+- **Layout snapshots**: a small, opt-in golden layer pins *how* a view looks —
+  column alignment, truncation, borders, pane splits. `snapshot_test.go` holds
+  only the generic harness; each view's test lives in its own
+  `<view>_snapshot_test.go` (e.g. `hosts_snapshot_test.go`).
+  `assertSnapshots(t, "<view>", a)` resizes the app through the real
+  `WindowSizeMsg` path and diffs the ANSI-stripped screen against
+  `testdata/<view>-<w>x<h>.golden` at the canonical matrix
+  **80×24, 100×40, 120×40, 160×50** — one size per layout branch (preview
+  hidden / bottom pane / side pane / wide). Regenerate after an intentional
+  visual change with `go test ./internal/tui -run Snapshot -update` and commit
+  the goldens in the same change, so reviewers see the visual delta as a
+  readable diff. Rules for adding one: seeded rows only (shape them like real
+  Grail records, including `__enrich.*` series and `lifetime`), and call
+  `pinSnapshotClock(t)`, which pins `catalog.Now` and the local zone so
+  relative ages and wall-clock cells render the same on every machine. Scope
+  stays narrow on purpose: snapshot **main screens and their sanity states
+  only** (the populated table view, not every overlay, picker, or edge
+  state). The point is guarding core functionality against visual breakage —
+  not pinning every pixel, which is the churn the original design rejected
+  goldens for.
 - **Datasource tests**: no HTTP anywhere — the `dataSource.runFn` func seam
   replaces the executor, and API-backed views stub the injected `Source`
   closures. Canned rows are injected via `seedRows`.
+- **Catalog-wide invariants**: `adr_invariants_test.go` walks every `Spec`
+  and asserts the vision/ADR rules once: both exits (`c` echoes `dtctl`, `o`
+  has a web target), and the query budget (one primary query per open,
+  metadata not re-paid, backtracking free).
+- **Mutation testing**: `make mutation-diff` (CI, changed lines) and
+  `make mutation` (weekly) run gremlins to check that tests assert logic,
+  not just execute it. See CONTRIBUTING.md.
 
 ---
 

@@ -1,4 +1,4 @@
-.PHONY: all build install test test-coverage vet lint fmt clean third-party-licenses
+.PHONY: all build install test test-coverage mutation mutation-diff vet lint fmt clean third-party-licenses
 
 # Leading "v" stripped so local builds report the same shape as release builds.
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null | sed 's/^v//' || echo dev)
@@ -9,6 +9,11 @@ DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 DTCTL_VERSION_PKG = github.com/dynatrace-oss/dtctl/pkg/version
 LDFLAGS = -ldflags "-X main.version=$(VERSION) -X $(DTCTL_VERSION_PKG).Version=$(VERSION) -X $(DTCTL_VERSION_PKG).Commit=$(COMMIT) -X $(DTCTL_VERSION_PKG).Date=$(DATE) -s -w"
 INSTALL_BIN_DIR ?= $(if $(GOBIN),$(GOBIN),$(shell go env GOPATH)/bin)
+# Mutation testing: pinned and run via `go run`, so it never enters go.mod.
+GREMLINS ?= go run github.com/go-gremlins/gremlins/cmd/gremlins@v0.6.0
+MUTATION_BASE ?= origin/main
+MUTATION_THRESHOLD ?= 80
+MUTATION_MIN_JUDGED ?= 10
 
 all: build
 
@@ -47,6 +52,19 @@ test-coverage:
 	@go test -race -coverprofile=coverage.out ./...
 	@go tool cover -func=coverage.out | tail -1
 
+# Mutation testing over the whole module (slow: every mutant recompiles its
+# package). Reports lived mutants; no threshold.
+mutation:
+	@$(GREMLINS) unleash -S lt -o mutation.json .
+	@scripts/mutation-report.sh mutation.json
+
+# Mutation testing over lines changed since MUTATION_BASE; fails below
+# MUTATION_THRESHOLD percent efficacy once at least MUTATION_MIN_JUDGED
+# mutants were judged.
+mutation-diff:
+	@$(GREMLINS) unleash -S lt --diff $(MUTATION_BASE) -o mutation.json .
+	@scripts/mutation-report.sh mutation.json $(MUTATION_THRESHOLD) $(MUTATION_MIN_JUDGED)
+
 vet:
 	@go vet ./...
 
@@ -57,4 +75,4 @@ fmt:
 	@golangci-lint fmt ./...
 
 clean:
-	@rm -rf bin coverage.out
+	@rm -rf bin coverage.out mutation.json

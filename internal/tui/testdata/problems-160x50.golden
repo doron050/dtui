@@ -1,0 +1,50 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                                                                               last 2h
+ problems ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 5 rows · 1s                                                                                                  │ P-26071546 Ingest volume above forecast for log…
+ ID          STATUS  CATEGORY              TITLE                            AFFECTED                    AGE   │
+▌P-26071546  ACTIVE  CUSTOM_ALERT          Ingest volume above forecast f…  demo-environment            8m    │  status: ACTIVE
+ P-26071542  ACTIVE  AVAILABILITY          Kubernetes node not ready        aks-system-31337-vmss0000…  18m   │  category: CUSTOM_ALERT
+ P-26071541  CLOSED  CUSTOM_ALERT          Synthetic availability below 9…  demo-environment            19m   │  active: 8m (since 11:52:00)
+ P-26071538  ACTIVE  ERROR                 Failure rate increase            OrderController +2          40m   │  affected: demo-environment
+ P-26071533  ACTIVE  RESOURCE_CONTENTION   Memory saturation                ip-10-0-4-30.ec2.internal   1h    │
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ enter inspect  l logs  s traces  m metrics  v events  / filter  f facets  J/K sort  : views  t timeframe  S segments  r refresh  ? help  q quit
+ ≡ dtctl query 'fetch dt.davis.problems, from:now() - 2h | fieldsAdd dt.system.bucket | filter not(dt.davis.is_duplicate) | sort event.start desc | limit 200'

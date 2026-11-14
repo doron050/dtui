@@ -108,3 +108,20 @@ func TestFormatNs(t *testing.T) {
 		}
 	}
 }
+
+func TestSafeText(t *testing.T) {
+	for in, want := range map[string]string{
+		"plain /checkout":             "plain /checkout",
+		"multi\nline\ttab":            "multi\nline\ttab",
+		"x\x1b]52;c;Zm9v\x07\x1b[2Jy": "x␛]52;c;Zm9v␇␛[2Jy",
+		"crlf\r\n":                    "crlf\n",
+		"del\x7f nul\x00":             "del␡ nul␀",
+		"c1\u009b2J":                  "c1\ufffd2J",
+		"bad\xffbyte":                 "bad\ufffdbyte",
+		"ünïcode ✓":                   "ünïcode ✓",
+	} {
+		if got := SafeText(in); got != want {
+			t.Errorf("SafeText(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

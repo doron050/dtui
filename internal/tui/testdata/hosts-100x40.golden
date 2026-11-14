@@ -1,0 +1,40 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                   last 2h
+ hosts ────────────────────────────────────────────────────────────────────────────────────────────
+ 3 rows · 1s
+ NAME        OS      CPUS  CPU            MEM              MEMORY  IP              SKU          SEEN
+▌ip-10-0-1…  LINUX      4  ⠤⣄⣀⣀⣀⣀⣠⢶ 5.2%  ⣀⣀⣀⣀⣀⡴⢦ 15.8%  15.5 GiB  203.0.113.10                  29d
+ ip-10-0-2…  LINUX      8  ⣀⣠⠴⠒⠒⠦⠤ 62.7%  ⣀⣠⠤⠖⠒⠒⠒ 54.4%  31.0 GiB  10.0.2.41                     29d
+ build-age…  WINDO…    16                                64.0 GiB  192.168.10.23                  2d
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ ip-10-0-1-17
+  HOST  HOST-0000000000000B01
+
+  id: HOST-0000000000000B01
+  os: LINUX · Ubuntu 22.04.3 LTS (Jammy Jellyfish) (kernel 6.2.0-1017-aws)
+  cpu: 4 logical / 2 physical
+  memory: 15.5 GiB
+  ip: 203.0.113.10,10.0.1.17
+ … (enter opens the full record)
+ enter details  d record  l logs  s traces  m metrics  p problems  v events  / filter  f facets  J/…
+ ≡ dtctl query 'smartscapeNodes "HOST" | fieldsRemove k8s.object, aws.object, azure.object, referen…

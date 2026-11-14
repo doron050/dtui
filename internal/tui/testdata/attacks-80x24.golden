@@ -1,0 +1,24 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                               last 2h
+ attacks ──────────────────────────────────────────────────────────────────────
+ 4 rows · 1s
+ TIME      TYPE        ACTION  SEVERITY  SOURCE       PROCESS           LOCATION
+▌11:41:07  SQL_INJEC…  Block…  CRITICAL  198.51.100…  orders-api        OrderRe…
+ 11:36:06  SQL_INJEC…  Block…  CRITICAL  198.51.100…  orders-api        OrderRe…
+ 11:21:03  CMD_INJEC…  Audit…  HIGH      203.0.113.…  report-worker     PdfRend…
+ 11:16:08  SSRF        Block…  MEDIUM    203.0.113.…  SpringBoot prox…  ProxyCo…
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ enter inspect  l logs  s trace  m metrics  p problems  v events  / filter  f f…
+ ≡ dtctl query 'fetch security.events, from:now() - 2h | fieldsAdd dt.system.bu…

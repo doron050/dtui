@@ -1,0 +1,50 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                                                                               last 2h
+ namespaces ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 5 rows · 1s                                                                                                  │ checkout
+ NAME                                                                 CLUSTER            PODS  RUNNING   SEEN │  K8S_NAMESPACE  K8S_NAMESPACE-0000000000000E11
+▌checkout                                                             demo-eks-useast1     30       16    77d │
+ checkout                                                             demo-aks-westeu      12       12    15d │  id: K8S_NAMESPACE-0000000000000E11
+ dynatrace                                                            demo-eks-useast1    110      110   114d │  cluster: demo-eks-useast1
+ kube-system                                                          demo-eks-useast1     41       41   445d │  first seen: Apr 28 13:07
+ monitoring                                                           demo-aks-westeu       3        3    29h │  last seen: 11:45:00
+                                                                                                              │  tags:k8s.labels
+                                                                                                              │   istio.io/rev: default
+                                                                                                              │   kubernetes.io/metadata.name: checkout
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ enter workloads  d details  l logs  s traces  p problems  v events  / filter  f facets  J/K sort  : views  t timeframe  S segments  r refresh  ? help  q quit
+ ≡ dtctl query 'smartscapeNodes "K8S_NAMESPACE" | fields id, name, type, cluster = k8s.cluster.name, lifetime, `tags:k8s.labels` | sort name asc | limit 300'

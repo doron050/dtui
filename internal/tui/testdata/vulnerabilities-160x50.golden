@@ -1,0 +1,50 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                                                                               last 2h
+ vulnerabilities ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 7 rows · 1s                                                                                                  │ Remote code execution in example-json deseriali…
+  open    muted    all                                                                                        │
+ ID      SCORE  LEVEL     EXPOSURE  EXPLOIT  FIX  STACK     TECH        AFFECTED  CVE               TITLE     │  risk: CRITICAL · 9.1
+▌S-101     9.1  CRITICAL  public    avail    yes  library   JAVA               1  CVE-2026-10001    Remote c… │  status: OPEN
+ S-102     7.6  HIGH      -                  yes  library   JAVA               1  CVE-2026-10002    HTTP/2 r… │  exposure: public
+ S-103     7.6  HIGH      -         avail    yes  library   JAVA               1  CVE-2026-10003    Authenti… │  exploit: publicly available
+ S-104     7.1  HIGH      -                       library   JAVA               1  CVE-2026-10004    Stack ov… │  fix: available
+ S-105     6.5  MEDIUM                       yes  k8s       KUBERNETES         1  CVE-2026-10005    Containe… │  stack: library
+ S-106     5.3  MEDIUM                            k8s       KUBERNETES         1  CVE-2026-10006    Service … │  affected: 1
+ S-107     3.7  LOW       -                  yes  library   JAVA               1  CVE-2026-10007    Informat… │  tech: JAVA
+                                                                                                              │  cve: CVE-2026-10001
+                                                                                                              │  url: https://tenant.example.invalid/ui/securi…
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ tab lens  enter inspect  / filter  f facets  J/K sort  : views  t timeframe  S segments  r refresh  ? help  q quit
+ ≡ dtctl query 'fetch security.events, from:now() - 24h | filter event.type == "VULNERABILITY_STATE_REPORT_EVENT" and event.level == "VULNERABILITY" | sort tim…

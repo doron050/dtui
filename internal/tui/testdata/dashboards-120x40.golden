@@ -1,0 +1,40 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                                       last 2h
+ dashboards ───────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 4 rows · 1s                                                          │ Kubernetes cluster overview
+  all    mine                                                         │
+ NAME                MODIFIED  SHARED  TAGS                           │  id: 00000000-0000-4000-8000-000000000d01
+▌Kubernetes cluste…        2h  true    k8s,platform                   │
+ Checkout — golden…       22h  true    checkout                       │
+ OneAgent fleet he…        4d  false                                  │
+ Scratchpad               20d  false                                  │
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ tab lens  enter inspect  / filter  J/K sort  : views  t timeframe  S segments  r refresh  ? help  q quit
+ ≡ dtctl get dashboards

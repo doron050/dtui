@@ -1025,7 +1025,7 @@ func (a *app) View() string {
 	if pad := bodyH - lipgloss.Height(body); pad > 0 {
 		body += strings.Repeat("\n", pad)
 	}
-	return header + "\n" + body + "\n" + footer
+	return sanitizeFrame(header + "\n" + body + "\n" + footer)
 }
 
 func (a *app) renderHeader() string {

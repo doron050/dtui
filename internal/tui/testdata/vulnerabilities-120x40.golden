@@ -1,0 +1,40 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                                       last 2h
+ vulnerabilities ──────────────────────────────────────────────────────────────────────────────────────────────────────
+ 7 rows · 1s                                                          │ Remote code execution in example-json deseriali…
+  open    muted    all                                                │
+ ID    SCORE  LEVEL  EXPOSURE  EXPLOIT  FIX  STACK  TECH  AFFECTED  C │  risk: CRITICAL · 9.1
+▌S-1…    9.1  CRIT…  public    avail    yes  libr…  JAVA         1  … │  status: OPEN
+ S-1…    7.6  HIGH   -                  yes  libr…  JAVA         1  … │  exposure: public
+ S-1…    7.6  HIGH   -         avail    yes  libr…  JAVA         1  … │  exploit: publicly available
+ S-1…    7.1  HIGH   -                       libr…  JAVA         1  … │  fix: available
+ S-1…    6.5  MEDI…                     yes  k8s    KUB…         1  … │  stack: library
+ S-1…    5.3  MEDI…                          k8s    KUB…         1  … │  affected: 1
+ S-1…    3.7  LOW    -                  yes  libr…  JAVA         1  … │  tech: JAVA
+                                                                      │  cve: CVE-2026-10001
+                                                                      │  url: https://tenant.example.invalid/ui/securi…
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ tab lens  enter inspect  / filter  f facets  J/K sort  : views  t timeframe  S segments  r refresh  ? help  q quit
+ ≡ dtctl query 'fetch security.events, from:now() - 24h | filter event.type == "VULNERABILITY_STATE_REPORT_EVENT" and e…

@@ -4,16 +4,23 @@ name: pr-title
 # version from it. A title that is not a conventional commit is silently ignored
 # by release-please, so it is rejected here instead.
 #
-# pull_request_target only to get a token that can read fork PRs; this workflow
-# never checks out or runs PR code.
+# pull_request only: release-please opens its PR with GITHUB_TOKEN, which starts
+# pull_request workflows but not pull_request_target. Fork PRs get a read-only
+# token, which is all this check needs. A second pull_request_target trigger
+# would share the concurrency group and cancel this run, failing the check.
+# This workflow never checks out or runs PR code.
 
 on:
-  pull_request_target:
+  pull_request:
     types:
       - opened
       - edited
       - reopened
       - synchronize
+
+concurrency:
+  group: conventional-pr-title-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 permissions: {}
 
@@ -25,7 +32,7 @@ jobs:
       pull-requests: read
     steps:
       - name: Validate the PR title
-        uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6.1.1
+        uses: amannn/action-semantic-pull-request@2252a14e810aa9b85c2d560bd7070c802206ecf6 # v6.1.2
         with:
           types: |
             feat

@@ -9,6 +9,13 @@ before:
     # Only download — never `go mod tidy`, which could dirty the tree and make
     # GoReleaser refuse to run.
     - go mod download
+    # Shell completions are generated from the host build and shipped in the
+    # archives; the Homebrew cask installs them.
+    - go build -o "/tmp/dtui-completions-helper" .
+    - sh -c 'mkdir -p completions'
+    - sh -c '"/tmp/dtui-completions-helper" completion bash > completions/dtui.bash'
+    - sh -c '"/tmp/dtui-completions-helper" completion zsh > completions/dtui.zsh'
+    - sh -c '"/tmp/dtui-completions-helper" completion fish > completions/dtui.fish'
 
 builds:
   - id: dtui
@@ -51,6 +58,8 @@ archives:
       - README.md
       - third_party/THIRD_PARTY_LICENSES.txt
       - third_party/licenses.csv
+      - src: completions/*
+        dst: completions
 
 checksum:
   name_template: checksums.txt
@@ -77,6 +86,30 @@ sboms:
 
 snapshot:
   version_template: "{{ incpatch .Version }}-next"
+
+homebrew_casks:
+  - repository:
+      owner: dynatrace-oss
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: https://github.com/dynatrace-oss/dtui
+    description: "Interactive, keyboard-driven terminal UI for Dynatrace"
+    # auto skips the tap push for prerelease tags.
+    skip_upload: auto
+    completions:
+      bash: completions/dtui.bash
+      zsh: completions/dtui.zsh
+      fish: completions/dtui.fish
+    # The binaries are not notarized, so clear the quarantine flag that Homebrew
+    # sets on macOS downloads. A raw postflight block, because the structured
+    # `hooks.post.install` is deprecated and `install_steps` cannot express an
+    # OS check.
+    custom_block: |
+      postflight do
+        if OS.mac?
+          system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/dtui"]
+        end
+      end
 
 # Release notes are written by release-please (GitHub Release body) and
 # GoReleaser only attaches artifacts to that existing release, so it must not

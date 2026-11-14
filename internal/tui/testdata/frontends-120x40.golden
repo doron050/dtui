@@ -1,0 +1,40 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                                       last 2h
+ frontends ────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 4 rows · 1s                                                          │ easytravel-web
+ NAME                 TYPE    REQUESTS         ERRORS            SEEN │  FRONTEND  FRONTEND-0000000000000F51
+▌easytravel-web       web     ⣠⣄⣀⣤⡤⣄⡤⢶      6  ⠹⣄⣀⣀⣀⣤⣀⡼      4    76d │
+ easytravel-android   mobile  ⣀⣀⣀⣀⣀⣀⣀⣀     74  ⣀⣀⣀⣀⣀⣀⣀⣀     13    76d │  id: FRONTEND-0000000000000F51
+ kiosk-terminal       custom                                      28m │  type: web
+ storefront           web                                         69d │  first seen: Apr 29 20:56
+                                                                      │  last seen: 11:38:00
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ enter details  d record  m metrics  p problems  v events  u sessions  e userevents  / filter  f facets  J/K sort  : vi…
+ ≡ dtctl query 'smartscapeNodes "FRONTEND" | fieldsRemove references | sort name asc | limit 100'

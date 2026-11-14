@@ -1,0 +1,40 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                                       last 2h
+ logs ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 6 rows · 1s                                                          │ orders-api-7c9d8f6b5-q4wzt
+ TIME          LEVEL  SOURCE                    CONTENT               │
+▌11:59:56      INFO   orders-api-7c9d8f6b5-q4…  2026-07-15 11:59:56.… │  level: INFO
+ 11:59:52      INFO   orders-api-7c9d8f6b5-q4…  2026-07-15 11:59:52.… │  content
+ 11:59:51      WARN   orders-api-7c9d8f6b5-q4…  2026-07-15 11:59:51.… │   2026-07-15 11:59:56.364  INFO 1 --- [nio-8080-
+ 11:59:46      ERROR  orders-api-7c9d8f6b5-q4…  2026-07-15 11:59:46.… │   exec-9] c.e.orders.web.OrderController
+ 11:59:01      NONE   Linux System              Jul 15 11:59:01 ip-1… │   : GET /api/orders 200 (12 ms)
+ 11:58:59      INFO   coredns-5d78c9869d-abcde  [INFO] 10.42.0.7:530… │  at: 11:59:56
+                                                                      │  pod: orders/orders-api-7c9d8f6b5-q4wzt
+                                                                      │  container: orders-api
+                                                                      │  process: SpringBoot orders-api com.example.or…
+                                                                      │  host: ip-10-0-1-17
+                                                                      │  source: Container Output
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ enter inspect  s trace  p problems  a patterns  / filter  f facets  J/K sort  w raw reader  T head/tail  + more  : vie…
+ ≡ dtctl query 'fetch logs, from:now() - 2h | fieldsAdd dt.system.bucket | sort timestamp desc | limit 300'

@@ -1388,6 +1388,31 @@ repo — the pattern is what generalizes.
   `summarize count(), by:{<app>.conversation_id}` over 7d). The bridge only
   works for recent activity, which is the debugging case anyway.
 
+### 1.24 Live Debugger snapshots — `application.snapshots`, breakpoints by uid
+
+**Status: from dtctl's implementation, not yet validated live by dtui.**
+
+- One record per breakpoint hit in `application.snapshots` (a bucket table,
+  see the `bucketTables` allowlist). Fields dtctl relies on: `timestamp`,
+  `breakpoint.id`, `snapshot.id`, `snapshot.message`, `snapshot.data`,
+  `snapshot.string_map`, `code.filepath`, `code.function`,
+  `code.line.number`, `thread.name`, `session.id`.
+- `breakpoint.id` is a **uid**: compare with `toUid("<id>")` (dtctl's
+  `get snapshots`); a plain string compare is the silent-empty trap. The
+  breakpoints view `toString()`s it after summarizing so the id survives as
+  text for the drill.
+- `snapshot.data` is a base64 protobuf (`AugReportMessage`) and
+  `snapshot.string_map` its string cache; decode with dtctl's
+  `output.DecodeSnapshotRecords` — never fork the decoder. The decoded tree
+  carries `rookout.frame` (function/filename/line/locals) and
+  `rookout.traceback`.
+- Breakpoint *configuration* is not in Grail — it lives behind the Live
+  Debugger GraphQL API, whose workspace lookup is get-or-create (a write), so
+  dtui derives its breakpoint list from the hits only.
+- Host/process/trace association fields on snapshot records are unconfirmed;
+  `snapshotEntity` and the trace drill read them tolerantly
+  (`catalog/livedebugger.go`) — confirm on a tenant before relying on them.
+
 ---
 
 ## 2. TUI extension model — how to add a view

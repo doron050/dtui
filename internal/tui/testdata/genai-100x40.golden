@@ -1,0 +1,40 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                   last 2h
+ genai ────────────────────────────────────────────────────────────────────────────────────────────
+ 6 rows · 1s
+ NAME                                          KIND        PROVIDER      SERVICE                SEEN
+▌travel-assistant                              agent                     travel-agent-api         6d
+ anthropic.claude-3-5-sonnet-20240620-v1:0     model       aws.bedrock                            6d
+ gpt-4o-mini                                   model       openai                                21d
+ text-embedding-3-small                        model       openai                                35d
+ openai                                        provider    openai                                47d
+ travel-agent-api                              service                   travel-agent-api         6d
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ travel-assistant
+  GENAI_AGENT  GENAI_AGENT-0000000000000A91
+
+  id: GENAI_AGENT-0000000000000A91
+  type: GENAI_AGENT
+  first seen: Jul 08 15:26
+  last seen: 11:48:00
+
+
+ enter details  d record  s traces  m metrics  p problems  v events  / filter  f facets  J/K sort  …
+ ≡ dtctl query 'smartscapeNodes "GENAI_AGENT", "GENAI_SERVICE", "GENAI_MODEL", "GENAI_PROVIDER" | f…

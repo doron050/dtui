@@ -1,0 +1,40 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                   last 2h
+ userevents ───────────────────────────────────────────────────────────────────────────────────────
+ 5 rows · 1s
+  all    errors    actions    views    requests
+ TIME          KIND          DETAIL                               VIEW                      DURATION
+▌11:59:38      request       /api/checkout/submit                 /checkout                  117.9ms
+ 11:59:38      request       /api/checkout/quote                  /checkout                  133.1ms
+ 11:59:37      error         TypeError: Cannot read properties …  /checkout                      0µs
+ 11:59:37      user_action   click on "Place order"               /checkout                    1.81s
+ 11:59:30      view_summary  /cart                                /cart                        2.84s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ /api/checkout/submit
+
+  kind: request
+  response: POST 200
+  view: /checkout
+  app: storefront
+  duration: 117.9ms
+  start: 11:59:38
+ … (enter opens the full record)
+ tab lens  enter inspect  s trace  p problems  u session  / filter  f facets  J/K sort  : views  t …
+ ≡ dtctl query 'fetch user.events, from:now() - 2h | fieldsAdd dt.system.bucket | sort start_time d…

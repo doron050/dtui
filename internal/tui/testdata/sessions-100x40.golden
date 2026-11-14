@@ -1,0 +1,40 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                   last 2h
+ sessions ─────────────────────────────────────────────────────────────────────────────────────────
+ 4 rows · 1s
+  all    errors    bounced
+ START      APP           DURATION  VIEWS  ACTIONS  REQS  ERRORS  BROWSER      OS      GEO  END
+▌11:49:07   easytravel-…     5.25s      0        1   139      29  ChromeForT…  Linux        synthet…
+ 11:49:04   easytravel-…     2.17s      1        1    42       0  ChromeForT…  Linux        synthet…
+ 11:31:44   storefront      12m22s     12       31   388       2  Chrome 141…  Windo…  AT   timeout
+ 11:12:09   storefront      38.10s      1        2    17       0  Safari 18.6  iOS     US   visibil…
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ easytravel-web session
+
+  duration: 5.25s
+  activity: 0 views · 1 actions · 139 requests
+  errors: 29
+  client: ChromeForTesting 157.0.8103.38 · Linux
+  start: 11:49:07
+  end: synthetic_execution_finished
+
+ tab lens  enter session timeline  m metrics  p problems  e userevents  / filter  f facets  J/K sor…
+ ≡ dtctl query 'fetch user.sessions, from:now() - 24h | fieldsAdd dt.system.bucket | sort start_tim…

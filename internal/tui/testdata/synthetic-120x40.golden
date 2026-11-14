@@ -1,0 +1,40 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                                       last 2h
+ synthetic ────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 4 rows · 1s                                                          │ synthetic
+  all    browser    http                                              │
+ NAME      TYPE  AVAILABILITY  TAGS           ID                 SEEN │
+▌api hea…  http  ⣀⣀⣀⣀⣀⣀⣀ 100%                 HTTP_CHECK-00000…   31d │
+ checkou…  bro…  ⠉⠉⠉⢳⡏⠉⠉ 100%  team:checkout  SYNTHETIC_TEST-0…  525d │
+ login e…  http  ⣀⣀⣀⣀⣀⣀⣀ 100%  env:prod       HTTP_CHECK-00000…  713d │
+ search …  bro…  ⣀⣀⣀⣀⣀⣀⣀ 100%  env:prod,tea…  SYNTHETIC_TEST-0…  136… │
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ tab lens  enter executions  / filter  f facets  J/K sort  : views  t timeframe  S segments  r refresh  ? help  q quit
+ ≡ dtctl query 'fetch dt.entity.synthetic_test | fieldsAdd lifetime, tags | fieldsAdd monitor.type = "browser" | append…

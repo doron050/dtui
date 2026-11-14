@@ -192,9 +192,15 @@ type Column struct {
 	Title string
 	Field string // record key; ignored when Value is set
 	Width int    // display width; 0 = flex (shares remaining space)
+	Min   int    // floor when shrinking under space pressure; 0 = header text
 	Right bool   // right-align (numeric columns)
 	// Value computes the cell text from the whole record (optional).
 	Value func(rec map[string]any) string
+	// ValueW computes the cell text like Value but given the allocated
+	// display width (optional; takes precedence over Value). For cells
+	// whose content adapts to the space, e.g. a sparkline that shortens
+	// its graph before dropping its value.
+	ValueW func(rec map[string]any, width int) string
 	// Class returns a semantic style class ("error", "warn", "ok", "dim", "")
 	// for the formatted cell value (optional). The view layer maps classes to
 	// concrete styles.
@@ -208,9 +214,18 @@ type Column struct {
 // Text returns the formatted cell value for a record.
 func (c Column) Text(rec map[string]any) string {
 	if c.Value != nil {
-		return c.Value(rec)
+		return SafeText(c.Value(rec))
 	}
-	return FormatValue(rec[c.Field])
+	return SafeText(FormatValue(rec[c.Field]))
+}
+
+// TextAt returns the formatted cell value for a record given the display
+// width it will render in (ValueW when set, Text otherwise).
+func (c Column) TextAt(rec map[string]any, width int) string {
+	if c.ValueW != nil {
+		return SafeText(c.ValueW(rec, width))
+	}
+	return c.Text(rec)
 }
 
 // Lens is one quick server-side slice of a view's dataset — the spans view
@@ -248,8 +263,13 @@ type Spec struct {
 	API string
 	// Echo renders the CLI equivalent for API-backed views (dql is the
 	// composed Query output, "" when Query is nil). DQL views echo
-	// `dtctl query` automatically and leave this nil.
+	// `dtctl query` automatically; one may set Echo to name a dedicated dtctl
+	// command for some scopes, returning "" to keep the query echo.
 	Echo func(s Scope, dql string) string
+	// Decode rewrites the fetched records before they are shown (nil = none):
+	// Live Debugger snapshots arrive as protobuf payloads and are decoded
+	// into readable variables and a stack here.
+	Decode func(records []map[string]any) []map[string]any
 	// Dynamic derives the column set from the fetched records (the record
 	// sampler browses arbitrary tables); Columns is the empty-result
 	// fallback.
@@ -278,6 +298,10 @@ type Spec struct {
 	// sentinel "waterfall" opens the trace waterfall for Trace(rec).
 	EnterTarget string
 	EnterArg    func(rec map[string]any) string
+	// EnterInheritsScope carries this view's entity scope and server-side
+	// narrowing (searches, facets) into the EnterTarget view, for targets that
+	// list the raw records behind an aggregated row.
+	EnterInheritsScope bool
 	// Trace extracts a row's trace id ("" = none): the 's' jump on log
 	// records and enter on trace rows.
 	Trace func(rec map[string]any) string
@@ -523,7 +547,7 @@ var specs = []*Spec{
 	podsSpec, containersSpec, workloadsSpec, namespacesSpec, nodesSpec, clustersSpec, fleetSpec, modulesSpec, agentLogsSpec,
 	awsSpec, azureSpec, entitiesSpec, resourcesSpec,
 	frontendsSpec, databasesSpec, genaiSpec, vulnsSpec, attacksSpec, metricsSpec,
-	sessionsSpec, userEventsSpec, bizeventsSpec,
+	sessionsSpec, userEventsSpec, bizeventsSpec, breakpointsSpec, snapshotsSpec,
 	patternsSpec, slosSpec, detectorsSpec, dashboardsSpec,
 	syntheticSpec, executionsSpec,
 	dictionarySpec,

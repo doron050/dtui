@@ -1,0 +1,40 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                                       last 2h
+ attacks ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 4 rows · 1s                                                          │ SpringBoot orders-api com.example.orders.Applic…
+ TIME     TYPE      ACTION  SEVERITY  SOURCE     PROCESS     LOCATION │
+▌11:41:…  SQL_INJ…  Block…  CRITICAL  198.51.1…  orders-api  OrderRe… │  action: Blocked
+ 11:36:…  SQL_INJ…  Block…  CRITICAL  198.51.1…  orders-api  OrderRe… │  severity: CRITICAL
+ 11:21:…  CMD_INJ…  Audit…  HIGH      203.0.11…  report-wo…  PdfRend… │  type: SQL_INJECTION
+ 11:16:…  SSRF      Block…  MEDIUM    203.0.11…  SpringBoo…  ProxyCo… │  source: 198.51.100.75
+                                                                      │  process: orders-api
+                                                                      │  at: 11:41:07
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ enter inspect  l logs  s trace  m metrics  p problems  v events  / filter  f facets  J/K sort  : views  t timeframe  S…
+ ≡ dtctl query 'fetch security.events, from:now() - 2h | fieldsAdd dt.system.bucket | filter event.type == "DETECTION_F…

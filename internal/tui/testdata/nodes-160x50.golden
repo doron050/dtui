@@ -1,0 +1,50 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                                                                               last 2h
+ nodes ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 4 rows · 1s                                                                                                  │ aks-system-31337-vmss000004
+ NAME                                         INSTANCE     ZONE        CPUS   PODS  VERSION              SEEN │  K8S_NODE  K8S_NODE-0000000000000E21
+▌aks-system-31337-vmss000004                  Standard_D…  westeurop…     4     11  v1.32.6                2d │
+ aks-system-31337-vmss000005                  Standard_D…  westeurop…     4     11  v1.32.6                2d │  id: K8S_NODE-0000000000000E21
+ aks-user-27182-vmss00000a                    Standard_D…  westeurop…     4     23  v1.32.6               44h │  kubelet: v1.32.6
+ aks-user-27182-vmss00000b                    Standard_D…  westeurop…     4     19  v1.32.6               15d │  os: Ubuntu 22.04.5 LTS
+                                                                                                              │  capacity: 4 cpu
+                                                                                                              │  instance: Standard_D4ds_v5
+                                                                                                              │  zone: westeurope-1
+                                                                                                              │  cluster: demo-aks-westeu
+                                                                                                              │  first seen: Jul 13 10:16
+                                                                                                              │  last seen: 11:45:00
+                                                                                                              │  tags:k8s.labels
+                                                                                                              │   agentpool: system
+                                                                                                              │   kubernetes.io/arch: amd64
+                                                                                                              │   kubernetes.io/hostname: aks-system-31337-vmss…
+                                                                                                              │   kubernetes.io/os: linux
+                                                                                                              │   node.kubernetes.io/instance-type: Standard_D4…
+                                                                                                              │   topology.kubernetes.io/region: westeurope
+                                                                                                              │   … +1 more (enter opens)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ enter pods  d details  l logs  s traces  p problems  v events  / filter  f facets  J/K sort  : views  t timeframe  S segments  r refresh  ? help  q quit
+ ≡ dtctl query 'smartscapeNodes "K8S_NODE" | parse k8s.object, "JSON:obj" | fields id, name, type, cluster = k8s.cluster.name, version = obj[status][nodeInfo][…

@@ -1,0 +1,40 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                                                   last 2h
+ processes ────────────────────────────────────────────────────────────────────────────────────────
+ 6 rows · 1s
+ NAME          CPU             MEM             TECH        CONT  HOST                           SEEN
+▌CoreDNS cor…  ⣀⣀⣀⣀⣀⣰⣆⣀  0.1%  ⣀⣀⣀⣀⣀⣀⣀⣀  0.3%  go          ●     ip-10-0-1-17                    29d
+ Linux System  ⣀⡴⣆⣀⣀⣀⣀⣀  0.1%  ⣠⠞⠉⠉⠉⠉⠉⠉  1.1%  linux_sys…        ip-10-0-1-17                    29d
+ OneAgent lo…  ⣀⡴⣆⣀⣀⣰⣆⣀    0%  ⣀⣀⣀⣀⣀⣀⣀⣀  0.4%  dynatrace   ●     ip-10-0-1-17                     2d
+ Short-lived…  ⣀⣀⡶⣄⣀⣀⣀⣀    0%  ⣀⣀⣀⣀⣀⣀⣀⣀    0%                    ip-10-0-1-17                    29d
+ SpringBoot …  ⠤⣄⣠⠤⢤⣠⠴⠲  0.2%  ⣀⣀⣀⣀⣀⣀⣀⣀  1.8%  java        ●     ip-10-0-1-17                    29d
+ nginx         ⣰⢦⣠⢤⣀⣰⣆⣀    0%  ⣀⣀⣀⣀⣀⣀⣀⣀  0.1%  nginx             ip-10-0-1-17                    29d
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ CoreDNS coredns-*
+  PROCESS  PROCESS-0000000000000C01
+
+  id: PROCESS-0000000000000C01
+  group: CoreDNS coredns-*
+  tech: go
+  command: /coredns -conf /etc/coredns/Corefile
+  host: ip-10-0-1-17
+ … (enter opens the full record)
+ enter details  d record  l logs  m metrics  p problems  v events  / filter  f facets  J/K sort  : …
+ ≡ dtctl query 'smartscapeNodes "PROCESS" | fieldsRemove references | sort name asc | limit 500'

@@ -20,8 +20,13 @@ linters:
     - gocritic
     - ineffassign
     - unused
+    - dupl
 
   settings:
+    dupl:
+      # Lower as the near-duplicates in docs/dev/tech-debt.md are removed.
+      threshold: 150
+
     staticcheck:
       checks:
         - "all"
@@ -45,6 +50,10 @@ linters:
       - std-error-handling # errcheck: Close, Flush, Remove(All), print/printf/println, Setenv/Unsetenv, stdout/stderr
 
     rules:
+      # Table-driven tests repeat their shape by design
+      - path: _test\.go
+        linters:
+          - dupl
       # Allow unchecked errors in test code (deferred cleanup, test helpers, mock servers)
       - path: _test\.go
         linters:

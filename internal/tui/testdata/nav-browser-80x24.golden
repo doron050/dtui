@@ -1,0 +1,24 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                               last 2h
+ HOST ─────────────────────────────────────────────────────────────────────────
+ HOST  6 entities
+▌· ip-10-0-4-30.ec2.internal  HOST-0000000000000B01
+ · ip-10-0-4-12.ec2.internal  HOST-0000000000000B02
+ · ip-10-0-5-201.ec2.internal  HOST-0000000000000B03
+ · aks-system-31337-vmss000004  HOST-0000000000000B04
+ · gke-demo-pool-1-a1b2c3d4-x9k2  HOST-0000000000000B05
+ · win-build-agent-07  HOST-0000000000000B06
+
+
+
+
+
+
+
+
+
+
+
+
+
+ enter walk  d details  / filter  . pin  o open  : views  t timeframe  S segmen…
+ ≡ dtctl query 'smartscapeNodes "HOST" | fieldsAdd display = coalesce(if(name !…

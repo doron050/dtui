@@ -1,0 +1,24 @@
+ ▛▞▟ dtui  ·  context:test  ·  ● readonly                               last 2h
+ sessions ─────────────────────────────────────────────────────────────────────
+ 4 rows · 1s
+  all    errors    bounced
+ START  APP    DURATION  VIEWS  ACTIONS  REQS  ERRORS  BROWSER  OS    GEO  END
+▌11:4…  easy…     5.25s      0        1   139      29  Chrome…  Lin…       synt…
+ 11:4…  easy…     2.17s      1        1    42       0  Chrome…  Lin…       synt…
+ 11:3…  stor…    12m22s     12       31   388       2  Chrome…  Win…  AT   time…
+ 11:1…  stor…    38.10s      1        2    17       0  Safari…  iOS   US   visi…
+
+
+
+
+
+
+
+
+
+
+
+
+
+ tab lens  enter session timeline  m metrics  p problems  e userevents  / filte…
+ ≡ dtctl query 'fetch user.sessions, from:now() - 24h | fieldsAdd dt.system.buc…

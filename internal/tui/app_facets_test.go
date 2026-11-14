@@ -660,3 +660,137 @@ func TestBucketFacetFiltersAtSource(t *testing.T) {
 		t.Errorf("bucket facet not recorded in history: %+v", a.hist.entries)
 	}
 }
+
+func TestClampSel(t *testing.T) {
+	for _, tc := range []struct{ sel, n, want int }{
+		{3, 3, 2}, {1, 3, 1}, {-1, 3, 0}, {0, 0, 0},
+	} {
+		if got := clampSel(tc.sel, tc.n); got != tc.want {
+			t.Errorf("clampSel(%d, %d) = %d, want %d", tc.sel, tc.n, got, tc.want)
+		}
+	}
+}
+
+// Long facet lists scroll a window that follows the selection, with
+// "↑ N more"/"↓ N more" markers only when rows are clipped.
+func TestFacetListWindowFollowsSelection(t *testing.T) {
+	tv := testApp(t, "hosts").top().(*tableView)
+	tv.height = 20 // window of height-12 = 8 rows
+	render := func(n, sel int) string {
+		var b strings.Builder
+		tv.renderFacetList(&b, n, sel, func(i int) string { return fmt.Sprintf("row-%02d", i) }, nil)
+		return ansi.Strip(b.String())
+	}
+
+	out := render(20, 10)
+	for _, want := range []string{"↑ 3 more", "row-03", "row-10", "↓ 9 more"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("window at sel 10 missing %q:\n%s", want, out)
+		}
+	}
+	for _, gone := range []string{"row-02", "row-11"} {
+		if strings.Contains(out, gone) {
+			t.Errorf("window at sel 10 should clip %q:\n%s", gone, out)
+		}
+	}
+	if out := render(20, 8); !strings.Contains(out, "↑ 1 more") || strings.Contains(out, "row-00") {
+		t.Errorf("selecting row 8 should scroll by one:\n%s", out)
+	}
+	if out := render(20, 7); strings.Contains(out, "↑") {
+		t.Errorf("the last row of the first window must not scroll:\n%s", out)
+	}
+	if out := render(20, 19); strings.Contains(out, "↓") || !strings.Contains(out, "row-19") {
+		t.Errorf("at the end there is nothing below:\n%s", out)
+	}
+}
+
+// With no rows fetched the manager still opens while filters are active,
+// so they can be edited or removed.
+func TestFacetManagerOpensWithFiltersButNoRows(t *testing.T) {
+	a := testApp(t, "hosts")
+	seedRows(t, a, nil)
+	tv := a.top().(*tableView)
+	if len(tv.facetCandidates()) != 0 {
+		t.Fatalf("fixture assumption: no candidates without rows, got %v", tv.facetCandidates())
+	}
+	press(a, key("f"))
+	if tv.facetMode != facetOff {
+		t.Fatal("nothing to facet and nothing active: the picker should not open")
+	}
+	tv.searches = []string{"web"}
+	tv.facets = []catalog.Facet{{Field: "sku", Value: "t3.large"}}
+	press(a, key("f"))
+	if tv.facetMode != facetFieldStage {
+		t.Fatal("active filters must keep the manager reachable")
+	}
+}
+
+// Typing or backing out of the value stage puts the selection on the first
+// attribute, past the active filters, so enter adds rather than edits.
+func TestFacetSelectionReturnsPastActiveFilters(t *testing.T) {
+	a := testApp(t, "hosts")
+	seedRows(t, a, []map[string]any{hostRow()})
+	tv := a.top().(*tableView)
+	tv.searches = []string{"web"}
+	tv.facets = []catalog.Facet{{Field: "sku", Value: "t3.large"}}
+	a.ds.runFn = func(string) ([]map[string]any, error) { return nil, nil }
+
+	press(a, key("f"))
+	press(a, tea.KeyMsg{Type: tea.KeyUp})
+	typeText(a, "n")
+	if tv.facetSel != 2 {
+		t.Fatalf("typing should jump past the 2 active filters, sel = %d", tv.facetSel)
+	}
+	press(a, key("enter"))
+	if tv.facetMode != facetValueStage {
+		t.Fatal("enter on an attribute should explore its values")
+	}
+	press(a, key("esc"))
+	if tv.facetMode != facetFieldStage || tv.facetSel != 2 || tv.facetEdit != -1 {
+		t.Fatalf("esc back to the manager: mode=%d sel=%d edit=%d", tv.facetMode, tv.facetSel, tv.facetEdit)
+	}
+}
+
+func TestClearFacetsDropsFacetsWithoutSearches(t *testing.T) {
+	tv := testApp(t, "hosts").top().(*tableView)
+	tv.facets = []catalog.Facet{{Field: "sku", Value: "t3.large"}}
+	tv.clearFacets()
+	if len(tv.facets) != 0 {
+		t.Fatalf("facets = %v, want cleared", tv.facets)
+	}
+}
+
+func TestFacetValueSuggestionsFilter(t *testing.T) {
+	tv := testApp(t, "hosts").top().(*tableView)
+	tv.facetOptions = []catalog.FacetValue{{Value: "payment-api"}, {Value: "Cart"}}
+	for _, tc := range []struct{ input, want string }{
+		{"", "payment-api,Cart"},
+		{"car", "Cart"},
+		{"pay*", "payment-api,Cart"}, // a pattern goes to applyFacet unfiltered
+	} {
+		tv.facetInput.SetValue(tc.input)
+		var got []string
+		for _, fv := range tv.facetValueMatches() {
+			got = append(got, fv.Value)
+		}
+		if strings.Join(got, ",") != tc.want {
+			t.Errorf("input %q → %v, want %s", tc.input, got, tc.want)
+		}
+	}
+}
+
+func TestFacetManagerActiveHeaderOnlyWithFilters(t *testing.T) {
+	a := testApp(t, "hosts")
+	seedRows(t, a, []map[string]any{hostRow()})
+	tv := a.top().(*tableView)
+	press(a, key("f"))
+	if strings.Contains(ansi.Strip(tv.renderFacetPicker()), "active —") {
+		t.Error("no filters active: no 'active' section")
+	}
+	press(a, key("esc"))
+	tv.searches = []string{"web"}
+	press(a, key("f"))
+	if !strings.Contains(ansi.Strip(tv.renderFacetPicker()), "active —") {
+		t.Error("an active search should get the 'active' section")
+	}
+}
