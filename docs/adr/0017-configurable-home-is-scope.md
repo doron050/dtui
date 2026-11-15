@@ -48,9 +48,11 @@ the way every other `.dtui.yaml` key does.
 
 ## Consequences
 
-- Zero config is unchanged: no `home` block means the six curated panels,
-  rendered as before (no pills, no header counter). A configured list
-  whose ids all fail to resolve also falls back to them.
+- Zero config keeps the six curated panels and their queries: no `home`
+  block means no pills and no header counter. Panel titles now always
+  name their window (`· 24h`), and pressing `t` on home names the panels
+  that do not follow it. A configured list whose ids all fail to resolve
+  also falls back to the curated panels.
 - New panels are catalog entries reviewed like views; a user cannot add
   one from the workspace file.
 - Requests for per-panel presentation (columns, row counts, titles,

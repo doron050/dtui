@@ -67,7 +67,7 @@ func TestHomeJumpWindowWidens(t *testing.T) {
 
 func TestHomeK8sIntervalScalesWithWindow(t *testing.T) {
 	p := LookupHomePanel("k8s-warnings")
-	for label, want := range map[string]string{"30m": "interval: 5m", "24h": "interval: 1h", "30d": "interval: 1d"} {
+	for label, want := range map[string]string{"1m": "interval: 1m", "30m": "interval: 5m", "24h": "interval: 1h", "30d": "interval: 1d"} {
 		tf, _ := ParseTimeframe(label)
 		if q := p.Query(Scope{Timeframe: tf}); !strings.Contains(q, want) {
 			t.Errorf("%s: query misses %q:\n%s", label, want, q)

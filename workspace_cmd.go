@@ -46,7 +46,7 @@ resolved against dtctl's config and the tenant when dtui launches.`,
 			found, ok := workspace.Find()
 			if !ok {
 				cwd, _ := os.Getwd()
-				fmt.Fprintf(cmd.ErrOrStderr(), "✗ no %s found in %s or any parent directory\n", workspace.FileName, cwd)
+				fmt.Fprintf(cmd.ErrOrStderr(), "✗ no %s found in %s or any parent directory\n", workspace.FileName, catalog.SafeText(cwd))
 				return errInvalidWorkspace
 			}
 			path = found
@@ -107,7 +107,7 @@ func reportWorkspace(w io.Writer, path string) bool {
 	if err == nil {
 		path = abs
 	}
-	fmt.Fprintf(w, "%s\n\n", path)
+	fmt.Fprintf(w, "%s\n\n", catalog.SafeText(path))
 	ws, err := workspace.Load(path)
 	if err != nil {
 		fmt.Fprintf(w, "  ✗ %s\n\n", catalog.SafeText(strings.TrimPrefix(err.Error(), path+": ")))

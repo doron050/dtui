@@ -2,6 +2,9 @@ package main
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -146,6 +149,24 @@ func TestReportWorkspaceIsTerminalSafe(t *testing.T) {
 		reportWorkspace(&out, writeWorkspaceFile(t, f))
 		if strings.ContainsAny(out.String(), "\x1b\a") {
 			t.Errorf("report carries a raw control character:\n%q", out.String())
+		}
+	}
+	if runtime.GOOS == "windows" {
+		return // NTFS rejects control characters in file names
+	}
+	dir := filepath.Join(t.TempDir(), "\x1b]0;x\a\x1b[31mrepo")
+	if err := os.Mkdir(dir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, workspace.FileName)
+	for _, body := range []string{"view: pods\n", "view: [\n"} {
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		var out bytes.Buffer
+		reportWorkspace(&out, path)
+		if strings.ContainsAny(out.String(), "\x1b\a") {
+			t.Errorf("report carries a raw control character from the path:\n%q", out.String())
 		}
 	}
 	ws, err := workspace.Load(writeWorkspaceFile(t, files[0]))

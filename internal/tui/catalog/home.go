@@ -204,11 +204,14 @@ var homeK8sWarnings = &HomePanel{
 
 // homeSeriesInterval keeps the k8s timeseries at the curated 1h buckets for
 // windows up to a week and widens it beyond, so long windows stay small.
+// Short windows get narrower buckets, never wider than the window itself.
 func homeSeriesInterval(tf Timeframe) string {
-	if tf.Dur > 7*24*time.Hour {
+	switch {
+	case tf.Dur > 7*24*time.Hour:
 		return "1d"
-	}
-	if tf.Dur > 0 && tf.Dur < 2*time.Hour {
+	case tf.Dur > 0 && tf.Dur < 5*time.Minute:
+		return "1m"
+	case tf.Dur > 0 && tf.Dur < 2*time.Hour:
 		return "5m"
 	}
 	return "1h"

@@ -1,6 +1,6 @@
 // Package workspace discovers and parses the per-project .dtui.yaml
 // workspace file: committable defaults (filter segments, timeframe, initial
-// view, preferred environment) that tools apply on top of the user's personal
+// view, preferred environment, home layout) that tools apply on top of the user's personal
 // dtctl config. Unlike the local .dtctl.yaml (which replaces the global config
 // wholesale), a workspace file carries no contexts, no credentials, and no
 // executable keys by construction — it can only narrow what a session shows,
@@ -36,7 +36,8 @@ const MaxPrimaryTags = 5
 const Version = 1
 
 // Workspace is the parsed .dtui.yaml. All fields are optional; unknown
-// keys are ignored so older builds keep working with newer committed files.
+// top-level keys are ignored (and listed in UnknownKeys) so older builds keep
+// working with newer committed files. The home block is strict: see parseHome.
 // Values are used verbatim — no environment-variable expansion, because a
 // committed file must not behave differently per machine.
 type Workspace struct {
