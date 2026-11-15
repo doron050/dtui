@@ -123,7 +123,11 @@ func reportWorkspace(w io.Writer, path string) bool {
 		}
 		return v
 	}
-	row("✓", "version", or(fmt.Sprint(ws.Version), unset))
+	if ws.Version == 0 {
+		row("✓", "version", fmt.Sprintf("%s — %d", unset, workspace.Version))
+	} else {
+		row("✓", "version", fmt.Sprint(ws.Version))
+	}
 	row("✓", "environment", or(ws.Environment, unset+" — uses the current dtctl context"))
 	viewOK := ws.View == "" || isBespokeView(ws.View) || catalog.Lookup(ws.View) != nil
 	switch {

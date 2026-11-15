@@ -100,6 +100,12 @@ home:
 		}
 	}
 
+	out.Reset()
+	reportWorkspace(&out, writeWorkspaceFile(t, "view: pods\n"))
+	if want := "✓ version       (not set) — 1"; !strings.Contains(out.String(), want) {
+		t.Errorf("report misses %q:\n%s", want, out.String())
+	}
+
 	for _, label := range []string{"0h", "99999999999d"} {
 		out.Reset()
 		if reportWorkspace(&out, writeWorkspaceFile(t, "timeframe: "+label+"\n")) {

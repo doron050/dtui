@@ -503,3 +503,20 @@ func entityIDList(val any) []string {
 	}
 	return ids
 }
+
+// windowLabel renders a query window compactly: "last 2h" for a relative
+// one, a range ("07:45 → now") for an absolute one.
+func windowLabel(w catalog.Timeframe) string {
+	if !w.Absolute() {
+		return "last " + w.Label
+	}
+	from := w.From.Local().Format("15:04")
+	to := "now"
+	if !w.To.IsZero() {
+		to = w.To.Local().Format("15:04")
+		if !w.To.Local().Truncate(24 * time.Hour).Equal(w.From.Local().Truncate(24 * time.Hour)) {
+			to = w.To.Local().Format("Jan 02 15:04")
+		}
+	}
+	return from + " → " + to
+}

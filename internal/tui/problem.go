@@ -148,22 +148,6 @@ func (v *problemView) statusLine() string {
 	return strings.Join(parts, theme.HeaderSep.Render("  ·  "))
 }
 
-// windowLabel renders the investigation window compactly ("07:45 → now").
-func windowLabel(w catalog.Timeframe) string {
-	if !w.Absolute() {
-		return "last " + w.Label
-	}
-	from := w.From.Local().Format("15:04")
-	to := "now"
-	if !w.To.IsZero() {
-		to = w.To.Local().Format("15:04")
-		if !w.To.Local().Truncate(24 * time.Hour).Equal(w.From.Local().Truncate(24 * time.Hour)) {
-			to = w.To.Local().Format("Jan 02 15:04")
-		}
-	}
-	return from + " → " + to
-}
-
 // problemOverview is the problem page's first tab: curated facts, the
 // affected entities as navigable rows (the next hop of every triage), and
 // Davis's own explanation. Everything renders from the record in hand — no
